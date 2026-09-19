@@ -1,0 +1,6 @@
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y gcc sqlite3 libsqlite3-dev librdkafka-dev
+WORKDIR /app
+COPY . .
+RUN gcc -o WM_WS_M WM_WS_M.c -lsqlite3 -lrdkafka
+CMD ["./WM_WS_M"]
