@@ -30,8 +30,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      - KAFKA_BROKER=broker:29092
+    command: ["./WM_Central", "8080", "broker:29092"] 
+    ports:
+      - "8080:8080" 
     volumes:
       - ./db_data:/app/data
     depends_on:
@@ -42,27 +43,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.FO
-    environment:
-      - KAFKA_BROKER=broker:29092
+    command: ["./WM_FO", "broker:29092", "OP-01"]
+    stdin_open: true 
+    tty: true
     depends_on:
       - broker
-
-# Engine
-  ws_e:
-    build:
-      context: .
-      dockerfile: Dockerfile.WS_E
-    environment:
-      - KAFKA_BROKER=broker:29092
-    depends_on:
-      - broker
+      - central
 
 # Monitor
   ws_m:
     build:
       context: .
       dockerfile: Dockerfile.WS_M
-    environment:
-      - KAFKA_BROKER=broker:29092
+    command: ["./WM_WS_M", "5000"] 
+    depends_on:
+      - central
+
+# Engine
+  ws_e:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_E
+    command: ["./WM_WS_E", "ws_m", "5000", "broker:29092"] 
+    stdin_open: true 
+    tty: true
     depends_on:
       - broker
+      - ws_m
