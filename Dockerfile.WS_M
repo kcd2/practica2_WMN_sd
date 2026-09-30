@@ -3,4 +3,4 @@ RUN apt-get update && apt-get install -y gcc librdkafka-dev
 WORKDIR /app
 COPY . .
 RUN gcc -o WM_WS_M WM_WS_M.c -lrdkafka
-CMD ["./WM_WS_M"]
+CMD ["./WM_WS_M", "5000"]

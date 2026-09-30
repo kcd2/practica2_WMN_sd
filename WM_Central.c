@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <sqlite3.h>
 #include <pthread.h>
+#include <librdkafka/rdkafka.h>
 
 int s; //socket
 
@@ -15,6 +16,15 @@ void finalizar(int senyal) {
     printf("\napagando servidor WM_Central...\n");
     close(s);
     exit(0);
+}
+
+
+void *hilo_consumidor_kafka(void *arg) {
+    char *ip_kafka = (char *)arg;
+    char errstr[512];
+
+    rd_kafka_conf_t *conf = rd_kafka_conf_new();
+    rd_kafka_conf_set(conf, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
 }
 
 
@@ -173,9 +183,5 @@ int main(int argc, char *argv[]) {
     }
     close(s);
     return 0;
-
-
-
-
 
 }
