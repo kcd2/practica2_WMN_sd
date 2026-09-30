@@ -7,6 +7,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sqlite3.h>
+#include <pthread.h>
 
 int s; //socket
 
@@ -106,6 +107,53 @@ int main(int argc, char *argv[]) {
                         } else {
                             snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Sin conexion a la BD\n");
                         }
+
+                    }else if(strcmp(tipo_mensaje, "AVERIA") == 0){
+                        
+                        sqlite3 *db;
+                        char *err_msg = 0;
+                        char sql[512];
+                        
+                        if (sqlite3_open("water_management.db", &db) == SQLITE_OK) {
+
+                            snprintf(sql, sizeof(sql), "UPDATE estaciones SET estado = 'FUGA' WHERE id = '%s';", id_estacion);
+                            
+                            if (sqlite3_exec(db, sql, 0, 0, &err_msg) == SQLITE_OK) { // ejecutamos el insert
+                                printf(">>> BD: Estacion %s en %s reporta una FUGA <<<\n\r", id_estacion, ubicacion);
+                                snprintf(respuesta, sizeof(respuesta), "STATUS#OK#Estacion actualizado a FUGA\n");
+                            } else {
+                                printf("Error BD: %s\n", err_msg);
+                                snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Fallo al actualizar en BD\n");
+                                sqlite3_free(err_msg);
+                            }
+                            sqlite3_close(db);
+                        } else {
+                            snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Sin conexion a la BD\n");
+                        }
+
+                    }else if(strcmp(tipo_mensaje, "REPARADO") == 0){
+
+                        sqlite3 *db;
+                        char *err_msg = 0;
+                        char sql[512];
+                        
+                        if (sqlite3_open("water_management.db", &db) == SQLITE_OK) {
+
+                            snprintf(sql, sizeof(sql), "UPDATE estaciones SET estado = 'DISPONIBLE' WHERE id = '%s';", id_estacion);
+                            
+                            if (sqlite3_exec(db, sql, 0, 0, &err_msg) == SQLITE_OK) { // ejecutamos el insert
+                                printf(">>> BD: Estacion %s en %s reporta que ha sido REPARADO <<<\n\r", id_estacion, ubicacion);
+                                snprintf(respuesta, sizeof(respuesta), "STATUS#OK#Estacion actualizado a DISPONIBLE\n");
+                            } else {
+                                printf("Error BD: %s\n", err_msg);
+                                snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Fallo al actualizar en BD\n");
+                                sqlite3_free(err_msg);
+                            }
+                            sqlite3_close(db);
+                        } else {
+                            snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Sin conexion a la BD\n");
+                        }
+
                     }else{
                         snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Comando no reconocido\n");
                     }
@@ -125,4 +173,9 @@ int main(int argc, char *argv[]) {
     }
     close(s);
     return 0;
+
+
+
+
+
 }
