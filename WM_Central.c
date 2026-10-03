@@ -23,8 +23,94 @@ void *hilo_consumidor_kafka(void *arg) {
     char *ip_kafka = (char *)arg;
     char errstr[512];
 
-    rd_kafka_conf_t *conf = rd_kafka_conf_new();
-    rd_kafka_conf_set(conf, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
+    // CONSUMIDOR Kafka
+    rd_kafka_conf_t *conf_cons = rd_kafka_conf_new();
+    rd_kafka_conf_set(conf_cons, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf_cons, "group.id", "grupo_central", errstr, sizeof(errstr));
+    
+    rd_kafka_t *rk_consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf_cons, errstr, sizeof(errstr));
+    rd_kafka_poll_set_consumer(rk_consumer);
+    rd_kafka_topic_partition_list_t *topics = rd_kafka_topic_partition_list_new(1);
+    rd_kafka_topic_partition_list_add(topics, "wm_peticiones", RD_KAFKA_PARTITION_UA);
+    rd_kafka_subscribe(rk_consumer, topics);
+
+    // PRODUCTOR Kafka
+    rd_kafka_conf_t *conf_prod = rd_kafka_conf_new();
+    rd_kafka_conf_set(conf_prod, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
+    rd_kafka_t *rk_producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf_prod, errstr, sizeof(errstr));
+    
+    // Topics donde escribirá la Central
+    rd_kafka_topic_t *topic_fo = rd_kafka_topic_new(rk_producer, "wm_respuestas_fo", NULL);
+    rd_kafka_topic_t *topic_ws = rd_kafka_topic_new(rk_producer, "wm_ordenes_ws", NULL);
+
+    printf("[KAFKA] Hilo iniciado. Escuchando peticiones...\n");
+
+    // Bucle infinito de procesamiento
+    while(1) {
+        rd_kafka_message_t *rkmessage = rd_kafka_consumer_poll(rk_consumer, 1000);
+        
+        if (rkmessage && !rkmessage->err) {
+            char payload[1024];
+            snprintf(payload, sizeof(payload), "%.*s", (int)rkmessage->len, (char *)rkmessage->payload);
+            printf("\n[KAFKA] Peticion recibida: %s\n", payload);
+
+            // Formato esperado desde el FO: ID_OPERARIO#ID_ESTACION#COMANDO
+            char *id_operario = strtok(payload, "#");
+            char *id_estacion = strtok(NULL, "#");
+
+            if (id_operario && id_estacion) {
+                sqlite3 *db;
+                sqlite3_stmt *stmt;
+                
+                if (sqlite3_open("water_management.db", &db) == SQLITE_OK) {
+                    char sql[256];
+                    snprintf(sql, sizeof(sql), "SELECT estado FROM estaciones WHERE id = '%s';", id_estacion);
+
+                    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+                        char msg_productor[256];
+
+                        if (sqlite3_step(stmt) == SQLITE_ROW) {
+                            const unsigned char *estado = sqlite3_column_text(stmt, 0);
+                            printf("[CENTRAL] Estado actual de %s: %s\n", id_estacion, estado);
+
+                            if (strcmp((const char *)estado, "DISPONIBLE") == 0) {
+                                printf("[CENTRAL] -> Peticion AUTORIZADA. Avisando a FO y a WS...\n");
+                                
+                                // Enviar orden a la estación para que empiece a regar
+                                snprintf(msg_productor, sizeof(msg_productor), "%s#INICIAR_RIEGO", id_estacion);
+                                rd_kafka_produce(topic_ws, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                                                 msg_productor, strlen(msg_productor), NULL, 0, NULL);
+
+                                // Enviar confirmación al operario
+                                snprintf(msg_productor, sizeof(msg_productor), "%s#%s#AUTORIZADO", id_operario, id_estacion);
+                                rd_kafka_produce(topic_fo, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                                                 msg_productor, strlen(msg_productor), NULL, 0, NULL);
+                            } else {
+                                printf("[CENTRAL] -> Peticion DENEGADA. Estacion ocupada o con averia.\n");
+                                
+                                // Enviar denegación solo al operario
+                                snprintf(msg_productor, sizeof(msg_productor), "%s#%s#DENEGADO", id_operario, id_estacion);
+                                rd_kafka_produce(topic_fo, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                                                 msg_productor, strlen(msg_productor), NULL, 0, NULL);
+                            }
+                        } else {
+                            printf("[CENTRAL] -> Error: La estacion %s no existe.\n", id_estacion);
+                            snprintf(msg_productor, sizeof(msg_productor), "%s#%s#ERROR_NO_EXISTE", id_operario, id_estacion);
+                            rd_kafka_produce(topic_fo, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                                             msg_productor, strlen(msg_productor), NULL, 0, NULL);
+                        }
+                        sqlite3_finalize(stmt);
+                        
+                        // Forzar el envío inmediato de los mensajes generados
+                        rd_kafka_flush(rk_producer, 1000);
+                    }
+                    sqlite3_close(db);
+                }
+            }
+        }
+        if (rkmessage) rd_kafka_message_destroy(rkmessage);
+    }
+    return NULL;
 }
 
 
