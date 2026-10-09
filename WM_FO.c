@@ -44,7 +44,7 @@ void esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_estacion_esperada
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
     sleep(15);
     

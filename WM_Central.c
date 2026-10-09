@@ -7,7 +7,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sqlite3.h>
-#include <pthread.h>https://gemini.google.com/u/2/app/5f9dd61abf7a31fd?hl=es-ES&pageId=none
+#include <pthread.h>
 #include <librdkafka/rdkafka.h>
 
 int s; //socket
@@ -113,6 +113,67 @@ void *hilo_consumidor_kafka(void *arg) {
     return NULL;
 }
 
+void *hilo_menu_central(void *arg) {
+    char *ip_kafka = (char *)arg;
+    char entrada[128];
+    char errstr[512];
+
+    // PRODUCTOR Kafka exclusivo para el menú
+    rd_kafka_conf_t *conf_prod = rd_kafka_conf_new();
+    rd_kafka_conf_set(conf_prod, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
+    rd_kafka_t *rk_producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf_prod, errstr, sizeof(errstr));
+    rd_kafka_topic_t *topic_ws = rd_kafka_topic_new(rk_producer, "wm_ordenes_ws", NULL);
+
+    sleep(3); // Pausa breve para que el log de inicio termine de imprimir
+
+    while(1) {
+        printf("\n--- MANDO CENTRAL ---\n");
+        printf("1. Iniciar Riego Manualmente\n");
+        printf("2. Bloquear Estacion (Poner Fuera de Servicio)\n");
+        printf("3. Activar Estacion (Poner Disponible)\n");
+        printf("Seleccione opcion: ");
+        
+        if (!fgets(entrada, sizeof(entrada), stdin)) continue;
+        int opcion = atoi(entrada);
+
+        if (opcion >= 1 && opcion <= 3) {
+            printf("Introduzca ID de la estacion (ej. WS-01): ");
+            char id_est[64];
+            if (!fgets(id_est, sizeof(id_est), stdin)) continue;
+            id_est[strcspn(id_est, "\r\n")] = '\0'; // Limpiar salto de línea
+
+            sqlite3 *db;
+            if (sqlite3_open("water_management.db", &db) == SQLITE_OK) {
+                char sql[256];
+                char *err_msg = 0;
+                char msg_productor[256];
+
+                if (opcion == 1) {
+                    snprintf(msg_productor, sizeof(msg_productor), "%s#INICIAR_RIEGO", id_est);
+                    rd_kafka_produce(topic_ws, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                                     msg_productor, strlen(msg_productor), NULL, 0, NULL);
+                    rd_kafka_flush(rk_producer, 1000);
+                    printf(">> Orden de riego enviada a %s a traves de Kafka.\n", id_est);
+                } 
+                else if (opcion == 2) {
+                    snprintf(sql, sizeof(sql), "UPDATE estaciones SET estado = 'FUERA_SERVICIO' WHERE id = '%s';", id_est);
+                    sqlite3_exec(db, sql, 0, 0, &err_msg);
+                    printf(">> La estacion %s ha sido bloqueada correctamente.\n", id_est);
+                }
+                else if (opcion == 3) {
+                    snprintf(sql, sizeof(sql), "UPDATE estaciones SET estado = 'DISPONIBLE' WHERE id = '%s';", id_est);
+                    sqlite3_exec(db, sql, 0, 0, &err_msg);
+                    printf(">> La estacion %s vuelve a estar activada y disponible.\n", id_est);
+                }
+                sqlite3_close(db);
+            }
+        } else {
+            printf("Opcion no valida.\n");
+        }
+    }
+    return NULL;
+}
+
 
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
@@ -166,14 +227,20 @@ int main(int argc, char *argv[]) {
         const char *sql_create = "CREATE TABLE IF NOT EXISTS estaciones ("
                                  "id TEXT PRIMARY KEY, "
                                  "ubicacion TEXT, "
-                                 "estado TEXT DEFAULT 'DISPONIBLE');";
+                                 "estado TEXT DEFAULT 'DISPONIBLE'); "
+                                 "CREATE TABLE IF NOT EXISTS operarios ("
+                                 "id TEXT PRIMARY KEY, "
+                                 "nombre TEXT);";
         sqlite3_exec(db_init, sql_create, 0, 0, NULL);
         sqlite3_close(db_init);
-        printf("[CENTRAL] Base de datos SQLite inicializada y lista.\n");
+        printf("[CENTRAL] Base de datos SQLite inicializada (Estaciones y Operarios listos).\n");
     }
 
     pthread_t hilo_kafka;
     pthread_create(&hilo_kafka, NULL, hilo_consumidor_kafka, (void *)ip_kafka);
+    
+    pthread_t hilo_menu;
+    pthread_create(&hilo_menu, NULL, hilo_menu_central, (void *)ip_kafka);
     
     while(1){
         long_dir_cliente = sizeof(dir_cliente);
