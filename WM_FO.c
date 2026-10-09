@@ -45,6 +45,9 @@ void esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_estacion_esperada
 }
 
 int main(int argc, char **argv) {
+    setbuf(stdout, NULL);
+    sleep(15);
+    
     if (argc < 3) {
         fprintf(stderr, "Uso: %s <IP_KAFKA:PUERTO> <ID_OPERADOR> [FICHERO_RUTINAS]\n", argv[0]);
         return 1;

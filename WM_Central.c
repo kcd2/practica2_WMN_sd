@@ -7,7 +7,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sqlite3.h>
-#include <pthread.h>
+#include <pthread.h>https://gemini.google.com/u/2/app/5f9dd61abf7a31fd?hl=es-ES&pageId=none
 #include <librdkafka/rdkafka.h>
 
 int s; //socket
@@ -115,6 +115,9 @@ void *hilo_consumidor_kafka(void *arg) {
 
 
 int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL);
+    sleep(15);
+
     struct sockaddr_in dir_servidor, dir_cliente; //struct "ipv4, puerto, ip, relleno"
     unsigned int long_dir_cliente;
     int s2, proceso;
@@ -158,6 +161,20 @@ int main(int argc, char *argv[]) {
 
     signal(SIGINT, finalizar); //(Ctrl+C)
 
+    sqlite3 *db_init;
+    if (sqlite3_open("water_management.db", &db_init) == SQLITE_OK) {
+        const char *sql_create = "CREATE TABLE IF NOT EXISTS estaciones ("
+                                 "id TEXT PRIMARY KEY, "
+                                 "ubicacion TEXT, "
+                                 "estado TEXT DEFAULT 'DISPONIBLE');";
+        sqlite3_exec(db_init, sql_create, 0, 0, NULL);
+        sqlite3_close(db_init);
+        printf("[CENTRAL] Base de datos SQLite inicializada y lista.\n");
+    }
+
+    pthread_t hilo_kafka;
+    pthread_create(&hilo_kafka, NULL, hilo_consumidor_kafka, (void *)ip_kafka);
+    
     while(1){
         long_dir_cliente = sizeof(dir_cliente);
         s2 = accept(s, (struct sockaddr *)&dir_cliente, &long_dir_cliente); //acepta conexión entrante
@@ -173,12 +190,12 @@ int main(int argc, char *argv[]) {
             if(recibidos > 0) {
                 mensaje[recibidos] = '\0'; 
                 mensaje[strcspn(mensaje, "\n")] = '\0'; 
-			    printf("Mensaje recibido [%d]: %s\n\r", recibidos, mensaje);
+                printf("Mensaje recibido [%d]: %s\n\r", recibidos, mensaje);
 
-			    //validacion del protocolo
-			    tipo_mensaje = strtok(mensaje, "#");
-			    id_estacion = strtok(NULL, "#");
-			    ubicacion = strtok(NULL, "#");
+                //validacion del protocolo
+                tipo_mensaje = strtok(mensaje, "#");
+                id_estacion = strtok(NULL, "#");
+                ubicacion = strtok(NULL, "#");
 
                 if(tipo_mensaje != NULL && id_estacion != NULL && ubicacion != NULL){
                     if(strcmp(tipo_mensaje, "REGISTRO") == 0){

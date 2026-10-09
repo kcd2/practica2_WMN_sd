@@ -43,7 +43,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.FO
-    command: ["./WM_FO", "broker:29092", "OP-01"]
+    command: ["./WM_FO", "broker:29092", "OP-01", "rutinas.txt"]
     stdin_open: true 
     tty: true
     depends_on:
