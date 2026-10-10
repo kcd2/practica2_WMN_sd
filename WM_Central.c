@@ -118,13 +118,13 @@ void *hilo_menu_central(void *arg) {
     char entrada[128];
     char errstr[512];
 
-    // PRODUCTOR Kafka exclusivo para el menú
+    // PRODUCTOR Kafka exclusivo para el menu
     rd_kafka_conf_t *conf_prod = rd_kafka_conf_new();
     rd_kafka_conf_set(conf_prod, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
     rd_kafka_t *rk_producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf_prod, errstr, sizeof(errstr));
     rd_kafka_topic_t *topic_ws = rd_kafka_topic_new(rk_producer, "wm_ordenes_ws", NULL);
 
-    sleep(3); // Pausa breve para que el log de inicio termine de imprimir
+    sleep(3); // pausa para q el log de inicio termine de imprimir
 
     while(1) {
         printf("\n--- MANDO CENTRAL ---\n");
@@ -140,7 +140,7 @@ void *hilo_menu_central(void *arg) {
             printf("Introduzca ID de la estacion (ej. WS-01): ");
             char id_est[64];
             if (!fgets(id_est, sizeof(id_est), stdin)) continue;
-            id_est[strcspn(id_est, "\r\n")] = '\0'; // Limpiar salto de línea
+            id_est[strcspn(id_est, "\r\n")] = '\0'; // limpiar salto de linea
 
             sqlite3 *db;
             if (sqlite3_open("water_management.db", &db) == SQLITE_OK) {
