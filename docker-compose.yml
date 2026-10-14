@@ -1,6 +1,6 @@
 version: '3.8'
 
-# Cluster de kafka local
+
 services:
   broker:
     image: apache/kafka:latest
@@ -57,7 +57,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.WS_M
-    command: ["./WM_WS_M", "5000"] 
+  
+    command: ["./WM_WS_M", "central", "8080", "5000", "WS-01", "Parque Principal"] 
+    stdin_open: true 
+    tty: true
     depends_on:
       - central
 
@@ -66,7 +69,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.WS_E
-    command: ["./WM_WS_E", "ws_m", "5000", "broker:29092"] 
+
+    command: ["./WM_WS_E", "broker:29092", "ws_m", "5000", "WS-01"] 
     stdin_open: true 
     tty: true
     depends_on:
