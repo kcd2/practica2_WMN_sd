@@ -1,0 +1,3 @@
+OP-01#Operario OP-01
+OP-02#Operario OP-02
+OP-03#Operario OP-03

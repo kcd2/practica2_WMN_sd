@@ -2,5 +2,5 @@ FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y gcc librdkafka-dev
 WORKDIR /app
 COPY . .
-RUN gcc -o WM_WS_E WM_WS_E.c -lrdkafka -lpthread
+RUN gcc -o WM_WS_E WM_WS/WM_WS_E.c -lrdkafka -lpthread
 CMD ["./WM_WS_E", "broker:29092", "ws_m", "5000", "WS-01"]

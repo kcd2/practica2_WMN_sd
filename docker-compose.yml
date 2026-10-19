@@ -49,6 +49,21 @@ services:
     command: ["./WM_FO", "broker:29092", "OP-01", "rutinas.txt"]
     stdin_open: true 
     tty: true
+    volumes:
+      - fo_op01_data:/app/fo_data
+    depends_on:
+      - broker
+      - central
+
+  fo_02:
+    build:
+      context: .
+      dockerfile: Dockerfile.FO
+    command: ["./WM_FO", "broker:29092", "OP-02"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - fo_op02_data:/app/fo_data
     depends_on:
       - broker
       - central
@@ -74,6 +89,85 @@ services:
     command: ["./WM_WS_E", "broker:29092", "ws_m", "5000", "WS-01"] 
     stdin_open: true 
     tty: true
+    volumes:
+      - engine_ws01_data:/app/engine_data
     depends_on:
       - broker
       - ws_m
+
+  ws_m_02:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_M
+    command: ["./WM_WS_M", "central", "8080", "5001", "WS-02", "Jardin Norte"]
+    stdin_open: true
+    tty: true
+    depends_on:
+      - central
+
+  ws_e_02:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_E
+    command: ["./WM_WS_E", "broker:29092", "ws_m_02", "5001", "WS-02"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - engine_ws02_data:/app/engine_data
+    depends_on:
+      - broker
+      - ws_m_02
+
+  ws_m_03:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_M
+    command: ["./WM_WS_M", "central", "8080", "5002", "WS-03", "Parque Sur"]
+    stdin_open: true
+    tty: true
+    depends_on:
+      - central
+
+  ws_e_03:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_E
+    command: ["./WM_WS_E", "broker:29092", "ws_m_03", "5002", "WS-03"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - engine_ws03_data:/app/engine_data
+    depends_on:
+      - broker
+      - ws_m_03
+
+  ws_m_08:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_M
+    command: ["./WM_WS_M", "central", "8080", "5008", "WS-08", "Jardin Este"]
+    stdin_open: true
+    tty: true
+    depends_on:
+      - central
+
+  ws_e_08:
+    build:
+      context: .
+      dockerfile: Dockerfile.WS_E
+    command: ["./WM_WS_E", "broker:29092", "ws_m_08", "5008", "WS-08"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - engine_ws08_data:/app/engine_data
+    depends_on:
+      - broker
+      - ws_m_08
+
+volumes:
+  fo_op01_data:
+  fo_op02_data:
+  engine_ws01_data:
+  engine_ws02_data:
+  engine_ws03_data:
+  engine_ws08_data:
