@@ -12,7 +12,6 @@
 #include <strings.h>
 #include <signal.h>
 #include <time.h>
-#include <stdint.h>
 #include <sqlite3.h>
 #include <pthread.h>
 #include <librdkafka/rdkafka.h>
@@ -50,28 +49,24 @@ void leer_ultima_peticion(char *buffer, size_t tam) {
     snprintf(buffer, tam, "Ninguna petición registrada todavía");
 }
 
-int columna_existe(sqlite3 *db, const char *tabla, const char *columna) {
-    char sql[128];
-    sqlite3_stmt *stmt = NULL;
-    int existe = 0;
-    snprintf(sql, sizeof(sql), "PRAGMA table_info(%s);", tabla);
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
-        while (sqlite3_step(stmt) == SQLITE_ROW) {
-            const unsigned char *nombre = sqlite3_column_text(stmt, 1);
-            if (nombre && strcmp((const char *)nombre, columna) == 0) {
-                existe = 1;
-                break;
-            }
-        }
-    }
-    sqlite3_finalize(stmt);
-    return existe;
-}
-
 int asegurar_columna(sqlite3 *db, const char *tabla, const char *columna, const char *tipo) {
     char sql[256];
     char *err_msg = NULL;
-    if (columna_existe(db, tabla, columna)) return 0;
+    sqlite3_stmt *stmt = NULL;
+    int existe = 0;
+    int paso = SQLITE_DONE;
+    snprintf(sql, sizeof(sql), "PRAGMA table_info(%s);", tabla);
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return -1;
+    while ((paso = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const unsigned char *nombre = sqlite3_column_text(stmt, 1);
+        if (nombre && strcmp((const char *)nombre, columna) == 0) {
+            existe = 1;
+            break;
+        }
+    }
+    sqlite3_finalize(stmt);
+    if (existe) return 0;
+    if (paso != SQLITE_DONE) return -1;
     snprintf(sql, sizeof(sql), "ALTER TABLE %s ADD COLUMN %s %s;", tabla, columna, tipo);
     if (sqlite3_exec(db, sql, NULL, NULL, &err_msg) != SQLITE_OK) {
         const char *detalle_error = err_msg;
@@ -147,7 +142,7 @@ int cargar_operarios_config(sqlite3 *db) {
     return 0;
 }
 
-int insertar_outbox(sqlite3 *db, const char *topic, const char *payload) {
+int guardar_mensaje_pendiente(sqlite3 *db, const char *topic, const char *payload) {
     sqlite3_stmt *stmt = NULL;
     const char *sql = "INSERT INTO kafka_outbox (topic, payload, creado) VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER));";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return -1;
@@ -157,43 +152,6 @@ int insertar_outbox(sqlite3 *db, const char *topic, const char *payload) {
     sqlite3_finalize(stmt);
     if (resultado != SQLITE_DONE) return -1;
     return 0;
-}
-
-int encolar_evento_central(const char *topic, const char *payload) {
-    sqlite3 *db = NULL;
-    if (sqlite3_open("db_data/water_management.db", &db) != SQLITE_OK) {
-        if (db != NULL) sqlite3_close(db);
-        return -1;
-    }
-    sqlite3_busy_timeout(db, 3000);
-    int resultado = insertar_outbox(db, topic, payload);
-    sqlite3_close(db);
-    if (resultado != 0) fprintf(stderr, "No se pudo persistir un mensaje dirigido a Kafka.\n");
-    return resultado;
-}
-
-int encolar_evento_transaccional(sqlite3 *db, const char *topic, const char *payload) {
-    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) return -1;
-    if (insertar_outbox(db, topic, payload) != 0) {
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
-    }
-    if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
-        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
-        return -1;
-    }
-    return 0;
-}
-
-void publicar_mensaje_fo(const char *texto) {
-    encolar_evento_central("wm_respuestas_fo", texto);
-}
-
-void publicar_error_fo(const char *id_operario, const char *id_estacion, const char *causa, double volumen, int duracion) {
-    char mensaje[512];
-    snprintf(mensaje, sizeof(mensaje), "%s#%s#ERROR_AVERIA#%s#%.2f#%d",
-             id_operario, id_estacion, causa, volumen, duracion);
-    publicar_mensaje_fo(mensaje);
 }
 
 int finalizar_riego_central(const char *id_estacion, const char *volumen, const char *duracion, const char *causa) {
@@ -242,7 +200,7 @@ int finalizar_riego_central(const char *id_estacion, const char *volumen, const 
         sqlite3_close(db);
         return 0;
     }
-    const char *sql = "UPDATE estaciones SET estado = CASE WHEN ? = 'FUGA' THEN 'FUGA' WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DESCONECTADA' WHEN estado = 'REGANDO' THEN 'DISPONIBLE' ELSE estado END, caudal = 0.0, volumen = ?, operario = NULL, riego_inicio = NULL, riego_fin = NULL, estado_pre_desconexion = CASE WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DISPONIBLE' WHEN estado = 'DESCONECTADA' THEN 'DISPONIBLE' ELSE estado_pre_desconexion END WHERE id = ?;";
+    const char *sql = "UPDATE estaciones SET estado = CASE WHEN ? = 'FUGA' OR ? = 'ENGINE_DESCONECTADO' THEN 'FUGA' WHEN estado = 'REGANDO' THEN 'DISPONIBLE' ELSE estado END, caudal = 0.0, volumen = ?, operario = NULL, riego_inicio = NULL, riego_fin = NULL, estado_pre_desconexion = CASE WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DISPONIBLE' WHEN estado = 'DESCONECTADA' THEN 'DISPONIBLE' ELSE estado_pre_desconexion END WHERE id = ?;";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
         sqlite3_bind_text(stmt, 1, causa_texto, -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 2, causa_texto, -1, SQLITE_TRANSIENT);
@@ -258,12 +216,12 @@ int finalizar_riego_central(const char *id_estacion, const char *volumen, const 
             char error[512];
             snprintf(error, sizeof(error), "%s#%s#ERROR_AVERIA#%s#%.2f#%d",
                      id_operario, id_estacion, causa_texto, atof(volumen_texto), atoi(duracion_texto));
-            if (insertar_outbox(db, "wm_respuestas_fo", error) != 0) resultado = -1;
+            if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", error) != 0) resultado = -1;
         }
         char resumen[512];
         snprintf(resumen, sizeof(resumen), "%s#%s#FIN_RIEGO (Causa: %s, Vol: %s L, Tiempo: %s s)",
                  id_operario, id_estacion, causa_texto, volumen_texto, duracion_texto);
-        if (resultado == 0 && insertar_outbox(db, "wm_respuestas_fo", resumen) != 0) resultado = -1;
+        if (resultado == 0 && guardar_mensaje_pendiente(db, "wm_respuestas_fo", resumen) != 0) resultado = -1;
     }
     if (resultado == 0 && sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) == SQLITE_OK) {
         char info[256];
@@ -303,11 +261,10 @@ int registrar_averia_central(sqlite3 *db, const char *id_estacion, const char *c
     sqlite3_finalize(stmt);
     stmt = NULL;
     if (estado_actual[0] == '\0') goto error_averia;
-    const char *sql = "UPDATE estaciones SET estado = CASE WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DESCONECTADA' ELSE 'FUGA' END, estado_pre_desconexion = CASE WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DISPONIBLE' WHEN estado = 'DESCONECTADA' THEN 'FUGA' ELSE estado_pre_desconexion END, caudal = 0.0, riego_fin = CASE WHEN operario IS NOT NULL AND riego_fin IS NULL THEN CAST(strftime('%s','now') AS INTEGER) ELSE riego_fin END, ultimo_latido = CAST(strftime('%s','now') AS INTEGER) WHERE id = ?;";
+    const char *sql = "UPDATE estaciones SET estado = 'FUGA', estado_pre_desconexion = CASE WHEN ? = 'ENGINE_DESCONECTADO' THEN 'DISPONIBLE' WHEN estado = 'DESCONECTADA' THEN 'FUGA' ELSE estado_pre_desconexion END, caudal = 0.0, riego_fin = CASE WHEN operario IS NOT NULL AND riego_fin IS NULL THEN CAST(strftime('%s','now') AS INTEGER) ELSE riego_fin END, ultimo_latido = CAST(strftime('%s','now') AS INTEGER) WHERE id = ?;";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) goto error_averia;
     sqlite3_bind_text(stmt, 1, causa_texto, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, causa_texto, -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, id_estacion, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, id_estacion, -1, SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE || sqlite3_changes(db) == 0) goto error_averia;
     sqlite3_finalize(stmt);
     stmt = NULL;
@@ -316,7 +273,7 @@ int registrar_averia_central(sqlite3 *db, const char *id_estacion, const char *c
         operario_actual[0] != '\0' && strcmp(operario_actual, "CENTRAL") != 0 && strcmp(operario_actual, "MANUAL_WS") != 0) {
         char mensaje[512];
         snprintf(mensaje, sizeof(mensaje), "%s#%s#ERROR_AVERIA#%s#%.2f#%d", operario_actual, id_estacion, causa_texto, volumen_actual, duracion_actual);
-        if (insertar_outbox(db, "wm_respuestas_fo", mensaje) != 0) goto error_averia;
+        if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje) != 0) goto error_averia;
     }
     if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) goto error_averia;
     resultado = 0;
@@ -366,7 +323,7 @@ int registrar_reparacion_central(sqlite3 *db, const char *id_estacion) {
         if (strcmp(operario_actual, "CENTRAL") != 0 && strcmp(operario_actual, "MANUAL_WS") != 0) {
             char resumen[512];
             snprintf(resumen, sizeof(resumen), "%s#%s#FIN_RIEGO (Recuperado tras averia, Vol: %.2f L, Tiempo: %d s)", operario_actual, id_estacion, volumen_actual, duracion_actual);
-            if (insertar_outbox(db, "wm_respuestas_fo", resumen) != 0) goto error_reparacion;
+            if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", resumen) != 0) goto error_reparacion;
         }
     }
     if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) goto error_reparacion;
@@ -384,7 +341,7 @@ void confirmar_entrega_kafka(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, 
     if (mensaje->err != RD_KAFKA_RESP_ERR_NO_ERROR) error_entrega_kafka = 1;
 }
 
-void *hilo_publicador_outbox(void *arg) {
+void *hilo_publicador_pendientes(void *arg) {
     char *brokers = (char *)arg;
     char errstr[512];
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
@@ -449,7 +406,7 @@ void *hilo_publicador_outbox(void *arg) {
                 sqlite3_close(db);
             }
         } else {
-            fprintf(stderr, "[KAFKA] Entrega pendiente; el mensaje permanece en el outbox para reintento.\n");
+            fprintf(stderr, "[KAFKA] Entrega pendiente; el mensaje permanece guardado en SQLite para reintento.\n");
             sleep(1);
         }
     }
@@ -541,7 +498,7 @@ void *hilo_consumidor_kafka(void *arg) {
                                     char mensaje_fo[256];
                                     snprintf(mensaje_fo, sizeof(mensaje_fo), "%s#%s#TELEMETRIA#%s#%s",
                                              (const char *)operario, campo2, campo3, campo4);
-                                    if (insertar_outbox(db, "wm_respuestas_fo", mensaje_fo) != 0) transaccion_ok = 0;
+                                    if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_fo) != 0) transaccion_ok = 0;
                                 }
                             } else transaccion_ok = 0;
                         } else {
@@ -635,7 +592,7 @@ void *hilo_consumidor_kafka(void *arg) {
                                 char respuesta_lista[512];
                                 snprintf(respuesta_lista, sizeof(respuesta_lista), "%s#LISTA#%s#%s#%s",
                                          campo1, id, ubicacion, estado);
-                                if (insertar_outbox(db, "wm_respuestas_fo", respuesta_lista) != 0) lista_ok = 0;
+                                if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", respuesta_lista) != 0) lista_ok = 0;
                                 cantidad++;
                             }
                             if (paso_lista != SQLITE_DONE) lista_ok = 0;
@@ -645,7 +602,7 @@ void *hilo_consumidor_kafka(void *arg) {
                         sqlite3_finalize(stmt);
                         char fin_lista[128];
                         snprintf(fin_lista, sizeof(fin_lista), "%s#LISTA_FIN#%d", campo1, cantidad);
-                        if (lista_ok && insertar_outbox(db, "wm_respuestas_fo", fin_lista) == 0) {
+                        if (lista_ok && guardar_mensaje_pendiente(db, "wm_respuestas_fo", fin_lista) == 0) {
                             if (sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK) {
                                 sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
                                 lista_ok = 0;
@@ -666,23 +623,6 @@ void *hilo_consumidor_kafka(void *arg) {
                     char *id_operario = campo1;
                     char *id_estacion = campo2;
                     printf("\n[KAFKA] Peticion de riego recibida: Operario %s -> Estacion %s\n", id_operario, id_estacion);
-                    rd_kafka_timestamp_type_t tipo_timestamp;
-                    int64_t timestamp_peticion = rd_kafka_message_timestamp(rkmessage, &tipo_timestamp);
-                    int solicitud_retrasada = tipo_timestamp != RD_KAFKA_TIMESTAMP_NOT_AVAILABLE && timestamp_peticion > 0 &&
-                                              (long long)time(NULL) * 1000 - (long long)timestamp_peticion > 45000;
-                    if (solicitud_retrasada) {
-                        sqlite3 *db_retrasada = NULL;
-                        if (sqlite3_open("db_data/water_management.db", &db_retrasada) == SQLITE_OK) {
-                            sqlite3_busy_timeout(db_retrasada, 2000);
-                            char respuesta_retrasada[256];
-                            snprintf(respuesta_retrasada, sizeof(respuesta_retrasada), "%s#%s#ERROR_CENTRAL_CAIDA", id_operario, id_estacion);
-                            if (encolar_evento_transaccional(db_retrasada, "wm_respuestas_fo", respuesta_retrasada) != 0) procesado_ok = 0;
-                            printf("[CENTRAL] Solicitud de %s rechazada por superar 45 segundos en cola.\n", id_estacion);
-                            sqlite3_close(db_retrasada);
-                        } else {
-                            procesado_ok = 0;
-                        }
-                    } else {
                     sqlite3 *db = NULL;
                     sqlite3_stmt *stmt = NULL;
 
@@ -704,7 +644,7 @@ void *hilo_consumidor_kafka(void *arg) {
                         } else if (!operario_autorizado) {
                             char msg_error[256];
                             snprintf(msg_error, sizeof(msg_error), "%s#%s#ERROR_OPERARIO", id_operario, id_estacion);
-                            if (encolar_evento_transaccional(db, "wm_respuestas_fo", msg_error) != 0) procesado_ok = 0;
+                            if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", msg_error) != 0) procesado_ok = 0;
                             printf("[CENTRAL] Peticion rechazada: el operario %s no esta registrado.\n", id_operario);
                         } else {
                             char estado_texto[64] = "";
@@ -728,7 +668,7 @@ void *hilo_consumidor_kafka(void *arg) {
                             } else if (!estacion_existe) {
                                 char msg_error[256];
                                 snprintf(msg_error, sizeof(msg_error), "%s#%s#ERROR_NO_EXISTE", id_operario, id_estacion);
-                                if (encolar_evento_transaccional(db, "wm_respuestas_fo", msg_error) != 0) procesado_ok = 0;
+                                if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", msg_error) != 0) procesado_ok = 0;
                             } else if (strcmp(estado_texto, "DISPONIBLE") == 0) {
                                 char mensaje_orden[256];
                                 char mensaje_fo[256];
@@ -747,8 +687,8 @@ void *hilo_consumidor_kafka(void *arg) {
                                 if (autorizado) {
                                     snprintf(mensaje_orden, sizeof(mensaje_orden), "%s#INICIAR_RIEGO#%s", id_estacion, id_operario);
                                     snprintf(mensaje_fo, sizeof(mensaje_fo), "%s#%s#AUTORIZADO", id_operario, id_estacion);
-                                    if (insertar_outbox(db, "wm_ordenes_ws", mensaje_orden) == 0 &&
-                                        insertar_outbox(db, "wm_respuestas_fo", mensaje_fo) == 0 &&
+                                    if (guardar_mensaje_pendiente(db, "wm_ordenes_ws", mensaje_orden) == 0 &&
+                                        guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_fo) == 0 &&
                                         sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL) == SQLITE_OK) {
                                         char info[256];
                                         snprintf(info, sizeof(info), "Operario %s solicitó %s -> AUTORIZADO", id_operario, id_estacion);
@@ -761,7 +701,7 @@ void *hilo_consumidor_kafka(void *arg) {
                                     sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
                                     char mensaje_denegado[256];
                                     snprintf(mensaje_denegado, sizeof(mensaje_denegado), "%s#%s#DENEGADO", id_operario, id_estacion);
-                                    if (encolar_evento_transaccional(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
+                                    if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
                                 }
                             } else if (strcmp(estado_texto, "REGANDO") == 0) {
                                 char operario_actual[128] = "";
@@ -783,16 +723,16 @@ void *hilo_consumidor_kafka(void *arg) {
                                 } else if (strcmp(operario_actual, id_operario) == 0) {
                                     char mensaje_autorizado[256];
                                     snprintf(mensaje_autorizado, sizeof(mensaje_autorizado), "%s#%s#AUTORIZADO", id_operario, id_estacion);
-                                    if (encolar_evento_transaccional(db, "wm_respuestas_fo", mensaje_autorizado) != 0) procesado_ok = 0;
+                                    if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_autorizado) != 0) procesado_ok = 0;
                                 } else {
                                     char mensaje_denegado[256];
                                     snprintf(mensaje_denegado, sizeof(mensaje_denegado), "%s#%s#DENEGADO", id_operario, id_estacion);
-                                    if (encolar_evento_transaccional(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
+                                    if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
                                 }
                             } else {
                                 char mensaje_denegado[256];
                                 snprintf(mensaje_denegado, sizeof(mensaje_denegado), "%s#%s#DENEGADO", id_operario, id_estacion);
-                                if (encolar_evento_transaccional(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
+                                if (guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_denegado) != 0) procesado_ok = 0;
                                 char info[256];
                                 snprintf(info, sizeof(info), "Operario %s solicitó %s -> DENEGADO (%s)", id_operario, id_estacion, estado_texto);
                                 guardar_ultima_peticion(info);
@@ -801,7 +741,6 @@ void *hilo_consumidor_kafka(void *arg) {
                         sqlite3_close(db);
                     } else {
                         procesado_ok = 0;
-                    }
                     }
                 }
             }
@@ -850,19 +789,19 @@ int ejecutar_orden_central(sqlite3 *db, int opcion, const char *id_estacion) {
     int cambios = sqlite3_changes(db);
     if (opcion == 1 && cambios > 0) {
         snprintf(mensaje, sizeof(mensaje), "%s#INICIAR_RIEGO#CENTRAL", id_estacion);
-        if (insertar_outbox(db, "wm_ordenes_ws", mensaje) != 0) {
+        if (guardar_mensaje_pendiente(db, "wm_ordenes_ws", mensaje) != 0) {
             sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
             return -1;
         }
     } else if (opcion == 2 && cambios > 0) {
         snprintf(mensaje, sizeof(mensaje), "%s#FUERA_SERVICIO#DETENER_RIEGO", id_estacion);
-        if (insertar_outbox(db, "wm_ordenes_ws", mensaje) != 0) {
+        if (guardar_mensaje_pendiente(db, "wm_ordenes_ws", mensaje) != 0) {
             sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
             return -1;
         }
     } else if (opcion == 3 && cambios > 0) {
         snprintf(mensaje, sizeof(mensaje), "%s#ACTIVAR_ESTACION", id_estacion);
-        if (insertar_outbox(db, "wm_ordenes_ws", mensaje) != 0) {
+        if (guardar_mensaje_pendiente(db, "wm_ordenes_ws", mensaje) != 0) {
             sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
             return -1;
         }
@@ -1217,8 +1156,8 @@ int main(int argc, char *argv[]) {
     pthread_t hilo_kafka;
     pthread_create(&hilo_kafka, NULL, hilo_consumidor_kafka, (void *)ip_kafka);
 
-    pthread_t hilo_outbox;
-    pthread_create(&hilo_outbox, NULL, hilo_publicador_outbox, (void *)ip_kafka);
+    pthread_t hilo_pendientes;
+    pthread_create(&hilo_pendientes, NULL, hilo_publicador_pendientes, (void *)ip_kafka);
 
     pthread_t hilo_menu;
     pthread_create(&hilo_menu, NULL, hilo_menu_central, (void *)ip_kafka);

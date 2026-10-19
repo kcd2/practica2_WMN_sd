@@ -17,19 +17,9 @@
 int linea_checkpoint_actual = -1;
 volatile int error_entrega_fo = 0;
 
-int guardar_checkpoint(const char *id_estacion, int linea) {
+/* Guarda el punto de reanudación del operario antes de enviar o esperar una petición. */
+int guardar_checkpoint(const char *id_estacion, int linea, const char *estado) {
     mkdir("fo_data", 0777);
-    FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
-    if (file == NULL) return -1;
-    int escrito = fprintf(file, "%s\n%d\nREADY\n", id_estacion, linea) > 0;
-    if (escrito && fflush(file) != 0) escrito = 0;
-    if (escrito && fsync(fileno(file)) != 0) escrito = 0;
-    if (fclose(file) != 0) escrito = 0;
-    if (escrito) return 0;
-    return -1;
-}
-
-int actualizar_estado_checkpoint(const char *id_estacion, int linea, const char *estado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
     if (file == NULL) return -1;
     int escrito = fprintf(file, "%s\n%d\n%s\n", id_estacion, linea, estado) > 0;
@@ -40,28 +30,26 @@ int actualizar_estado_checkpoint(const char *id_estacion, int linea, const char 
     return -1;
 }
 
-int leer_estado_checkpoint(char *estado, size_t tam) {
+int leer_checkpoint(char *id_estacion, size_t tam, int *linea, char *estado, size_t tam_estado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
     if (file == NULL) return 0;
-    char linea[256];
-    int valido = fgets(linea, sizeof(linea), file) != NULL &&
-                 fgets(linea, sizeof(linea), file) != NULL &&
-                 fgets(estado, (int)tam, file) != NULL;
-    if (valido) estado[strcspn(estado, "\r\n")] = '\0';
-    fclose(file);
-    return valido;
-}
-
-int leer_checkpoint(char *id_estacion, size_t tam, int *linea) {
-    FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
-    if (file == NULL) return 0;
+    char numero_linea[32];
     int leido = fgets(id_estacion, (int)tam, file) != NULL;
     if (leido) {
         id_estacion[strcspn(id_estacion, "\r\n")] = '\0';
-        if (fscanf(file, "%d", linea) != 1) *linea = -1;
+        leido = fgets(numero_linea, sizeof(numero_linea), file) != NULL;
+    }
+    if (leido) {
+        numero_linea[strcspn(numero_linea, "\r\n")] = '\0';
+        if (sscanf(numero_linea, "%d", linea) != 1) *linea = -1;
+        snprintf(estado, tam_estado, "WAITING");
+        if (fgets(estado, (int)tam_estado, file) != NULL) {
+            estado[strcspn(estado, "\r\n")] = '\0';
+        }
+        if (id_estacion[0] == '\0') leido = 0;
     }
     fclose(file);
-    return leido && id_estacion[0] != '\0';
+    return leido;
 }
 
 void limpiar_checkpoint(void) {
@@ -395,7 +383,9 @@ int main(int argc, char *argv[]) {
 
     char estacion_pendiente[128];
     int linea_pendiente = -1;
-    int hay_checkpoint = leer_checkpoint(estacion_pendiente, sizeof(estacion_pendiente), &linea_pendiente);
+    char estado_checkpoint[32] = "";
+    int hay_checkpoint = leer_checkpoint(estacion_pendiente, sizeof(estacion_pendiente), &linea_pendiente,
+                                         estado_checkpoint, sizeof(estado_checkpoint));
     char topic_completado[128];
     char resultado_completado[512];
     int particion_completada = -1;
@@ -417,13 +407,11 @@ int main(int argc, char *argv[]) {
         limpiar_checkpoint();
     } else if (hay_checkpoint) {
         linea_checkpoint_actual = linea_pendiente;
-        char estado_checkpoint[32] = "WAITING";
-        leer_estado_checkpoint(estado_checkpoint, sizeof(estado_checkpoint));
         if (strcmp(estado_checkpoint, "READY") == 0) {
             char solicitud_pendiente[256];
             snprintf(solicitud_pendiente, sizeof(solicitud_pendiente), "%s#%s", id_operador, estacion_pendiente);
             if (publicar_mensaje(rk_producer, topic_peticiones, solicitud_pendiente) != 0 ||
-                actualizar_estado_checkpoint(estacion_pendiente, linea_pendiente, "WAITING") != 0) {
+                guardar_checkpoint(estacion_pendiente, linea_pendiente, "WAITING") != 0) {
                 fprintf(stderr, "[RECUPERACION] No se pudo reenviar la petición pendiente.\n");
                 rd_kafka_topic_destroy(topic_peticiones);
                 rd_kafka_destroy(rk_producer);
@@ -481,13 +469,13 @@ int main(int argc, char *argv[]) {
             printf(">> Solicitando riego para: %s...\n", id_estacion);
 
             linea_checkpoint_actual = numero_linea;
-            if (guardar_checkpoint(id_estacion, numero_linea) != 0) {
+            if (guardar_checkpoint(id_estacion, numero_linea, "READY") != 0) {
                 fprintf(stderr, "[FO] No se pudo guardar el checkpoint; no se enviará la solicitud.\n");
                 continuar = 0;
                 break;
             }
             if (publicar_mensaje(rk_producer, topic_peticiones, payload) != 0 ||
-                actualizar_estado_checkpoint(id_estacion, numero_linea, "WAITING") != 0) {
+                guardar_checkpoint(id_estacion, numero_linea, "WAITING") != 0) {
                 fprintf(stderr, "[FO] No se pudo confirmar el envío; se conserva la petición para reintentar.\n");
                 continuar = 0;
                 break;
@@ -524,12 +512,12 @@ int main(int argc, char *argv[]) {
             snprintf(payload, sizeof(payload), "%s#%s", id_operador, entrada);
 
             linea_checkpoint_actual = -1;
-            if (guardar_checkpoint(entrada, -1) != 0) {
+            if (guardar_checkpoint(entrada, -1, "READY") != 0) {
                 fprintf(stderr, "[FO] No se pudo guardar el checkpoint; no se enviará la solicitud.\n");
                 continue;
             }
             if (publicar_mensaje(rk_producer, topic_peticiones, payload) != 0 ||
-                actualizar_estado_checkpoint(entrada, -1, "WAITING") != 0) {
+                guardar_checkpoint(entrada, -1, "WAITING") != 0) {
                 fprintf(stderr, "[FO] No se pudo confirmar el envío; se conserva la petición para reintentar.\n");
                 break;
             }
