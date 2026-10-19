@@ -27,18 +27,19 @@ services:
 
 # Central
   central:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["./WM_Central", "8080", "broker:29092"] 
-    ports:
-      - "8080:8080" 
-    volumes:
-      - ./db_data:/app/data
-    stdin_open: true 
-    tty: true
-    depends_on:
-      - broker
+      build:
+        context: .
+        dockerfile: Dockerfile
+      command: ["./WM_Central", "8080", "broker:29092"] 
+      ports:
+        - "8080:8080" 
+        - "8081:8081"
+      volumes:
+        - ./db_data:/app/db_data
+      stdin_open: true 
+      tty: true
+      depends_on:
+        - broker
 
 # FO
   fo:
