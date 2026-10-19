@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y gcc librdkafka-dev
+RUN apt-get update && apt-get install -y gcc
 WORKDIR /app
 COPY . .
-RUN gcc -o WM_WS_M WM_WS_M.c -lrdkafka
-CMD ["./WM_WS_M", "5000"]
+RUN gcc -o WM_WS_M WM_WS_M.c -lpthread
+CMD ["./WM_WS_M", "central", "8080", "5000", "WS-01", "Parque Principal"]

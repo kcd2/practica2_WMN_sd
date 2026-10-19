@@ -1,10 +1,11 @@
-
+// Archivo: WM_WS_M.c
 // Compilación: gcc WM_WS_M.c -o WM_WS_M -lpthread
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -20,7 +21,8 @@ char *ubicacion;
 
 int s_local_servidor = -1;
 int s_engine_cliente = -1;
-int en_fuga = 0; // 0 = DISPONIBLE, 1 = FUGA
+volatile int en_fuga = 0;        // 0 = DISPONIBLE, 1 = FUGA
+volatile int comando_engine = 0; // 0 = PING normal, 1 = DETENER_FUGA, 2 = RESTABLECER
 
 void finalizar(int sig)
 {
@@ -31,11 +33,12 @@ void finalizar(int sig)
 }
 
 /* =========================================================================
- * FUNCION CLIENTE TCP (Basada exactamente en la plantilla de la Practica 1)
+ * FUNCION CLIENTE TCP CON SOPORTE DNS Y VALIDACION DE STATUS#OK
  * ========================================================================= */
 int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta)
 {
     struct sockaddr_in direccion;
+    struct hostent *he;
     int s;
     int n, enviados, recibidos;
 
@@ -47,10 +50,19 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         return -1;
     }
 
+    /**** Resolver IP o Nombre de Contenedor (Docker DNS) ****/
+    he = gethostbyname(servidor_ip);
+    if (he == NULL)
+    {
+        fprintf(stderr, "Error. No se puede resolver el host/IP de Central: %s\n", servidor_ip);
+        close(s);
+        return -1;
+    }
+
     /**** Conectar al servidor ****/
     direccion.sin_family = AF_INET;
-    direccion.sin_addr.s_addr = inet_addr(servidor_ip);
     direccion.sin_port = htons(atoi(servidor_puerto));
+    memcpy(&direccion.sin_addr, he->h_addr_list[0], he->h_length);
 
     if (connect(s, (struct sockaddr *)&direccion, sizeof(direccion)) == -1)
     {
@@ -83,6 +95,14 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     respuesta[recibidos] = '\0';
     printf("[MONITOR] Respuesta de WM_Central: %s\n", respuesta);
 
+    /**** Validar que la respuesta comience por STATUS#OK ****/
+    if (strncmp(respuesta, "STATUS#OK", 9) != 0)
+    {
+        fprintf(stderr, "[MONITOR] Error: La Central rechazo la trama o devolvio un estado no valido.\n");
+        close(s);
+        return -1;
+    }
+
     /**** Cerrar el socket ****/
     close(s);
     return 0;
@@ -99,7 +119,7 @@ void *hilo_servidor_engine(void *arg)
     char buffer[1024];
     char mensaje_central[1024];
     char respuesta_central[1024];
-    int recibidos;
+    int enviados, recibidos;
 
     s_local_servidor = socket(AF_INET, SOCK_STREAM, 0);
     if (s_local_servidor == -1)
@@ -143,6 +163,33 @@ void *hilo_servidor_engine(void *arg)
 
         while (1)
         {
+            const char *consulta = "PING\n";
+            if (comando_engine == 1)
+            {
+                consulta = "DETENER_FUGA\n";
+                comando_engine = 0;
+            }
+            else if (comando_engine == 2)
+            {
+                consulta = "RESTABLECER\n";
+                comando_engine = 0;
+            }
+
+            enviados = write(s_engine_cliente, consulta, strlen(consulta));
+            if (enviados <= 0)
+            {
+                fprintf(stderr, "[MONITOR] Error al enviar comprobacion a WM_WS_E (desconexion). Notificando AVERIA...\n");
+                if (!en_fuga)
+                {
+                    snprintf(mensaje_central, sizeof(mensaje_central), "AVERIA#%s\n", id_estacion);
+                    enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central));
+                    en_fuga = 1;
+                }
+                close(s_engine_cliente);
+                s_engine_cliente = -1;
+                break;
+            }
+
             recibidos = read(s_engine_cliente, buffer, sizeof(buffer) - 1);
             if (recibidos <= 0)
             {
@@ -179,6 +226,8 @@ void *hilo_servidor_engine(void *arg)
                     en_fuga = 0;
                 }
             }
+
+            sleep(1);
         }
     }
     return NULL;
@@ -207,7 +256,6 @@ int main(int argc, char *argv[])
     id_estacion = argv[4];
     ubicacion = argv[5];
 
-    /**** 1. Registro inicial en WM_Central (con reintentos por si Docker tarda) ****/
     snprintf(mensaje, sizeof(mensaje), "REGISTRO#%s#%s\n", id_estacion, ubicacion);
     printf("Intentando registrar [%s - %s] en %s:%s...\n", id_estacion, ubicacion, servidor_ip, servidor_puerto);
 
@@ -229,11 +277,9 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /**** 2. Lanzar hilo servidor para vigilar al Engine (WM_WS_E) ****/
     pthread_t th_engine;
     pthread_create(&th_engine, NULL, hilo_servidor_engine, NULL);
 
-    /**** 3. Menu interactivo de apoyo en el Monitor ****/
     char opcion[16];
     while (1)
     {
@@ -256,7 +302,7 @@ int main(int argc, char *argv[])
             if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
             {
                 en_fuga = 1;
-                if (s_engine_cliente != -1) write(s_engine_cliente, "DETENER_FUGA", 12);
+                comando_engine = 1;
             }
         }
         else if (op == 2)
@@ -265,7 +311,7 @@ int main(int argc, char *argv[])
             if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
             {
                 en_fuga = 0;
-                if (s_engine_cliente != -1) write(s_engine_cliente, "RESTABLECER", 11);
+                comando_engine = 2;
             }
         }
     }

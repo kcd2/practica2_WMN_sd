@@ -3,340 +3,218 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f7fb">
-  <title>WaterManagement · Centro de control</title>
+  <meta name="theme-color" content="#f4f7fc">
+  <title>WM Central · Monitorización</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #162238;
-      --muted: #748197;
-      --line: #e7ebf1;
-      --canvas: #f4f7fb;
-      --panel: #fff;
-      --navy: #14243b;
-      --blue: #4479e8;
-      --green: #16875d;
-      --green-bg: #e7f6ef;
-      --red: #cb4d4b;
-      --red-bg: #fff0ef;
-      --orange: #bd7612;
-      --orange-bg: #fff4df;
+      --ink: #17253b;
+      --muted: #718096;
+      --line: #e3e9f1;
+      --panel: #ffffff;
+      --blue: #4778df;
+      --green: #18845d;
+      --red: #c94e4a;
+      --orange: #b97716;
       --gray: #718096;
-      --gray-bg: #eef1f5;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --shadow: 0 12px 35px rgba(31, 51, 83, .07);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; color: var(--ink); background: var(--canvas); }
-    button { font: inherit; }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 246px minmax(0, 1fr); }
-    .sidebar { background: var(--navy); color: #dce6f6; padding: 25px 16px 20px; display: flex; flex-direction: column; gap: 34px; }
-    .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; }
-    .brand-mark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: #315da5; color: #fff; font-size: 20px; box-shadow: inset 0 0 0 1px #ffffff20; }
-    .brand-name { color: #fff; font-size: 15px; font-weight: 750; letter-spacing: -.3px; }
-    .brand-sub { margin-top: 3px; color: #9bacc5; font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase; }
-    .nav-label { padding: 0 11px; color: #8192ac; font-size: 10px; font-weight: 750; letter-spacing: 1.3px; text-transform: uppercase; }
-    .nav { display: grid; gap: 6px; margin-top: 10px; }
-    .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 9px; color: #b7c4d8; font-size: 13px; }
-    .nav-item.active { background: #ffffff16; color: #fff; box-shadow: inset 3px 0 #76a3ff; }
-    .nav-icon { width: 18px; text-align: center; font-size: 16px; opacity: .95; }
-    .sidebar-bottom { margin-top: auto; border-top: 1px solid #ffffff17; padding: 17px 10px 0; color: #92a2ba; font-size: 11px; line-height: 1.55; }
-    .version { color: #d6e0ef; font-weight: 650; }
-    main { min-width: 0; padding: 26px clamp(18px, 3vw, 42px) 42px; }
-    .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
-    .eyebrow { color: var(--blue); font-size: 11px; font-weight: 750; letter-spacing: 1.15px; text-transform: uppercase; }
-    h1 { margin: 6px 0 5px; font-size: clamp(24px, 2.6vw, 31px); letter-spacing: -.9px; line-height: 1.15; }
-    .subtitle { color: var(--muted); font-size: 13px; }
-    .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-    .connection { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #f0d7a5; border-radius: 99px; color: #94620f; background: #fff9e9; font-size: 11px; font-weight: 700; }
-    .connection.live { border-color: #bce5d0; background: #effaf4; color: var(--green); }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-    .clock { color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .demo-banner { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; margin-bottom: 19px; border: 1px solid #dce7fb; border-radius: 10px; color: #52657f; background: #edf4ff; font-size: 12px; line-height: 1.5; }
-    .demo-banner strong { color: #345b9b; }
-    .demo-icon { flex: 0 0 auto; color: #4479e8; font-size: 15px; }
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 24px; }
-    .metric { padding: 16px 17px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 2px 7px #172b4d05; }
-    .metric-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 650; }
-    .metric-symbol { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 9px; font-size: 14px; }
-    .metric:nth-child(1) .metric-symbol { color: #4675d7; background: #edf3ff; }
-    .metric:nth-child(2) .metric-symbol { color: var(--green); background: var(--green-bg); }
-    .metric:nth-child(3) .metric-symbol { color: #56844c; background: #eff7e9; }
-    .metric:nth-child(4) .metric-symbol { color: var(--red); background: var(--red-bg); }
-    .metric-value { margin-top: 12px; font-size: 27px; line-height: 1; font-weight: 760; letter-spacing: -.7px; }
-    .metric-note { margin-top: 7px; color: #94a0b1; font-size: 10px; }
-    .content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(285px, .88fr); gap: 17px; align-items: start; }
-    .panel { min-width: 0; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); box-shadow: 0 2px 7px #172b4d05; }
-    .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 17px 18px 14px; border-bottom: 1px solid var(--line); }
-    .panel-title { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: -.2px; }
+    body { min-height: 100vh; margin: 0; background: #f4f7fc; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .shell { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 42px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 27px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 13px; color: #fff; background: linear-gradient(145deg, #4d80e6, #315db8); box-shadow: 0 7px 16px #4778df35; font-size: 21px; }
+    .brand-name { font-size: 11px; font-weight: 800; letter-spacing: 1.3px; color: #4a6aa6; text-transform: uppercase; }
+    .brand-caption { margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .page-heading { margin: 0 0 5px; font-size: clamp(25px, 3vw, 33px); letter-spacing: -.9px; line-height: 1.15; }
+    .page-subtitle { margin: 0; color: var(--muted); font-size: 13px; }
+    .api-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #ead9b2; border-radius: 99px; color: #93630e; background: #fff9e9; font-size: 11px; font-weight: 750; white-space: nowrap; }
+    .api-pill.connected { border-color: #bce5d0; color: var(--green); background: #effaf4; }
+    .api-pill.disconnected { border-color: #f1ceca; color: var(--red); background: #fff3f2; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .connection-time { margin-top: 7px; color: #8a96a8; font-size: 10px; text-align: right; }
+    .summary { display: grid; grid-template-columns: minmax(205px, .7fr) minmax(0, 1.7fr); gap: 14px; margin-bottom: 19px; }
+    .summary-card { min-height: 86px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 2px 8px #172b4d05; }
+    .summary-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .65px; text-transform: uppercase; }
+    .summary-symbol { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; color: var(--blue); background: #edf3ff; font-size: 12px; }
+    .summary-value { display: block; margin-top: 8px; overflow-wrap: anywhere; font-size: 14px; font-weight: 700; }
+    .summary-value.good { color: var(--green); }
+    .summary-value.bad { color: var(--red); }
+    .summary-value.unknown { color: #7b8798; }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); box-shadow: var(--shadow); }
+    .panel-head { display: flex; justify-content: space-between; align-items: end; gap: 15px; padding: 18px 20px 15px; border-bottom: 1px solid var(--line); }
+    .panel-title { margin: 0; font-size: 15px; font-weight: 760; letter-spacing: -.2px; }
     .panel-caption { margin-top: 4px; color: var(--muted); font-size: 10px; }
-    .small-select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: #536178; background: #fff; font-size: 10px; }
-    .station-tools { display: flex; align-items: center; gap: 8px; }
-    .search { width: 145px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; outline: 0; font: inherit; font-size: 10px; }
-    .search:focus { border-color: #8eacee; box-shadow: 0 0 0 3px #4479e817; }
-    .station-list { display: grid; gap: 10px; padding: 13px; }
-    .station { position: relative; padding: 13px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color .16s, box-shadow .16s, transform .16s; }
-    .station:hover { border-color: #cbd8ee; transform: translateY(-1px); }
-    .station.selected { border-color: #83a6ed; box-shadow: 0 0 0 3px #4479e812; }
-    .station-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-    .station-id { font-size: 13px; font-weight: 760; }
-    .station-location { margin-top: 3px; color: var(--muted); font-size: 10px; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; max-width: 150px; padding: 5px 8px; border-radius: 99px; font-size: 9px; font-weight: 750; white-space: nowrap; }
-    .badge .dot { width: 6px; height: 6px; }
-    .badge.available { color: var(--green); background: var(--green-bg); }
-    .badge.watering { color: #347945; background: #e9f6e7; }
-    .badge.leak { color: var(--red); background: var(--red-bg); }
-    .badge.blocked { color: var(--orange); background: var(--orange-bg); }
-    .badge.offline { color: var(--gray); background: var(--gray-bg); }
-    .station-meta { display: flex; gap: 19px; margin-top: 13px; padding-top: 11px; border-top: 1px solid #f0f2f6; color: var(--muted); font-size: 10px; }
-    .station-meta strong { display: block; margin-top: 4px; color: var(--ink); font-size: 11px; font-weight: 700; }
-    .station-meta .water-value { color: #3575d5; }
-    .selected-panel { padding-bottom: 16px; }
-    .detail-body { padding: 16px 17px 3px; }
-    .detail-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-    .detail-id { font-size: 18px; font-weight: 760; letter-spacing: -.4px; }
-    .detail-location { margin-top: 4px; color: var(--muted); font-size: 11px; }
-    .telemetry { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 17px; }
-    .telemetry-box { padding: 12px; border-radius: 9px; background: #f6f8fb; }
-    .telemetry-label { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .25px; text-transform: uppercase; }
-    .telemetry-value { margin-top: 7px; font-size: 19px; font-weight: 760; letter-spacing: -.5px; }
-    .telemetry-unit { margin-left: 3px; color: var(--muted); font-size: 10px; font-weight: 550; letter-spacing: 0; }
-    .telemetry-foot { margin-top: 4px; color: #929eb0; font-size: 9px; }
-    .detail-row { display: flex; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f0f2f6; font-size: 10px; }
-    .detail-row span:first-child { color: var(--muted); }
-    .detail-row strong { text-align: right; font-weight: 680; }
-    .action-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 13px 17px 0; }
-    .action { min-height: 34px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: #536178; background: #fff; cursor: pointer; font-size: 10px; font-weight: 700; transition: .15s; }
-    .action:hover:not(:disabled) { border-color: #c6d5ed; background: #f7faff; }
-    .action.primary { border-color: #4479e8; color: #fff; background: #4479e8; }
-    .action.primary:hover:not(:disabled) { border-color: #3269dd; background: #3269dd; }
-    .action.danger { border-color: #f1ceca; color: #ba514c; background: #fff8f7; }
-    .action:disabled { opacity: .42; cursor: not-allowed; }
-    .activity { padding: 5px 17px 12px; }
-    .event { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: start; padding: 11px 0; border-bottom: 1px solid #f0f2f6; }
-    .event:last-child { border-bottom: 0; }
-    .event-icon { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 7px; color: #4675d7; background: #edf3ff; font-size: 10px; }
-    .event-icon.warning { color: var(--red); background: var(--red-bg); }
-    .event-text { font-size: 10px; line-height: 1.4; }
-    .event-text strong { font-weight: 720; }
-    .event-time { padding-top: 2px; color: #98a3b1; font-size: 9px; white-space: nowrap; }
-    .empty { padding: 25px 14px; color: var(--muted); text-align: center; font-size: 11px; }
-    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 5; max-width: min(360px, calc(100vw - 32px)); padding: 12px 15px; border-radius: 9px; color: #fff; background: #1c2b42; box-shadow: 0 10px 30px #13243b30; font-size: 11px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .pulse { animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .42; } }
-    @media (max-width: 1060px) { .content-grid { grid-template-columns: 1fr; } .right-column { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; } }
-    @media (max-width: 760px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } main { padding: 21px 15px 30px; } .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); } .topbar { align-items: flex-start; } .top-actions { max-width: 145px; } .right-column { display: grid; grid-template-columns: 1fr; } .station-tools { align-items: stretch; flex-direction: column; } .search { width: 100%; } .station-head { align-items: flex-start; } }
-    @media (max-width: 420px) { .metric { padding: 13px; } .metric-value { font-size: 23px; } .station-meta { gap: 12px; } .badge { font-size: 8px; } .clock { display: none; } }
+    .station-count { padding: 6px 9px; border: 1px solid #e3eaf4; border-radius: 7px; color: #5f6f85; background: #f7f9fc; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; min-width: 720px; border-collapse: collapse; }
+    th, td { padding: 13px 16px; border-bottom: 1px solid #edf0f5; text-align: left; font-size: 11px; }
+    th { color: #7a8799; background: #fbfcfe; font-size: 9px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
+    td { color: #46566d; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .station-id { color: var(--ink); font-size: 12px; font-weight: 760; }
+    .location { color: #53647a; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 99px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+    .badge::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+    .badge.DISPONIBLE { color: var(--green); background: #e9f7ef; }
+    .badge.REGANDO { color: #176746; background: #d9f3e1; animation: badgeBlink 1.2s ease-in-out infinite; }
+    .badge.FUGA { color: var(--red); background: #fff0ef; }
+    .badge.FUERA_SERVICIO { color: var(--orange); background: #fff4df; }
+    .badge.DESCONECTADA { color: var(--gray); background: #eef1f5; }
+    tr.row-DISPONIBLE td { background: #f6fbf8; }
+    tr.row-REGANDO td { background: #edf8f0; animation: rowBlink 1.4s ease-in-out infinite; }
+    tr.row-FUGA td { background: #fff7f6; }
+    tr.row-FUERA_SERVICIO td { background: #fffbf3; }
+    tr.row-DESCONECTADA td { background: #f7f8fa; }
+    .reading { color: #2f6fbc; font-variant-numeric: tabular-nums; font-weight: 720; white-space: nowrap; }
+    .muted-value { color: #a1aab7; }
+    .table-message { padding: 29px 16px; color: var(--muted); text-align: center; font-size: 12px; }
+    .footnote { display: flex; justify-content: space-between; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); color: #8793a3; font-size: 10px; }
+    @keyframes badgeBlink { 0%, 100% { opacity: 1; } 50% { opacity: .48; } }
+    @keyframes rowBlink { 0%, 100% { background: #f0f9f2; } 50% { background: #dff1e3; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; } }
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 24px, 1240px); padding-top: 22px; }
+      .topbar { align-items: flex-start; flex-direction: column; gap: 16px; }
+      .api-area { align-self: stretch; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+      .connection-time { margin: 0; text-align: right; }
+      .summary { grid-template-columns: 1fr; gap: 10px; }
+      .summary-card { min-height: 74px; }
+      .panel-head { align-items: flex-start; padding: 15px; }
+      th, td { padding: 12px; }
+      .footnote { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar" aria-label="Navegación principal">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">⌁</div>
-        <div><div class="brand-name">WaterManagement</div><div class="brand-sub">Control de red</div></div>
-      </div>
+  <main class="shell">
+    <header class="topbar">
       <div>
-        <div class="nav-label">Operación</div>
-        <nav class="nav">
-          <div class="nav-item active"><span class="nav-icon">▦</span>Resumen general</div>
-          <div class="nav-item"><span class="nav-icon">◉</span>Estaciones</div>
-          <div class="nav-item"><span class="nav-icon">↗</span>Actividad</div>
-        </nav>
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">≈</div>
+          <div><div class="brand-name">WaterManagement · Central</div><div class="brand-caption">Supervisión de la red de riego</div></div>
+        </div>
+        <h1 class="page-heading" style="margin-top: 21px">Monitorización de estaciones</h1>
+        <p class="page-subtitle">Estado y telemetría recibida desde la red de riego.</p>
       </div>
-      <div class="sidebar-bottom"><div class="version">WMN · Panel central</div><div>Supervisión del riego urbano</div></div>
-    </aside>
-
-    <main>
-      <header class="topbar">
-        <div>
-          <div class="eyebrow">Water Network · Central</div>
-          <h1>Centro de control</h1>
-          <div class="subtitle">Estado de la red y actividad de riego en tiempo real</div>
-        </div>
-        <div class="top-actions">
-          <div id="connection" class="connection"><span class="dot"></span><span id="connectionText">Vista de demostración</span></div>
-          <div class="clock">Actualizado <strong id="updatedAt">—</strong></div>
-        </div>
-      </header>
-
-      <div id="demoBanner" class="demo-banner"><span class="demo-icon">ⓘ</span><div><strong>Prototipo visual:</strong> los datos que ves son de muestra. El panel está preparado para conectarse a una API de la Central cuando se implemente; los controles de esta vista solo simulan acciones localmente.</div></div>
-
-      <section class="metrics" aria-label="Resumen de estaciones">
-        <article class="metric"><div class="metric-top">Estaciones en red <span class="metric-symbol">◉</span></div><div class="metric-value" id="totalCount">0</div><div class="metric-note">Registradas en el sistema</div></article>
-        <article class="metric"><div class="metric-top">Disponibles <span class="metric-symbol">✓</span></div><div class="metric-value" id="availableCount">0</div><div class="metric-note">Preparadas para regar</div></article>
-        <article class="metric"><div class="metric-top">Regando ahora <span class="metric-symbol">≈</span></div><div class="metric-value" id="wateringCount">0</div><div class="metric-note">Con suministro activo</div></article>
-        <article class="metric"><div class="metric-top">Incidencias <span class="metric-symbol">!</span></div><div class="metric-value" id="incidentCount">0</div><div class="metric-note">Fuga o desconexión</div></article>
-      </section>
-
-      <div class="content-grid">
-        <section class="panel" aria-labelledby="stationsTitle">
-          <div class="panel-head">
-            <div><h2 class="panel-title" id="stationsTitle">Estaciones de riego</h2><div class="panel-caption">Selecciona una estación para ver sus datos y controles</div></div>
-            <div class="station-tools">
-              <input class="search" id="search" type="search" placeholder="Buscar estación..." aria-label="Buscar estación">
-              <select class="small-select" id="filter" aria-label="Filtrar por estado">
-                <option value="TODAS">Todos los estados</option><option value="DISPONIBLE">Disponibles</option><option value="REGANDO">Regando</option><option value="INCIDENCIA">Incidencias</option><option value="FUERA_SERVICIO">Fuera de servicio</option>
-              </select>
-            </div>
-          </div>
-          <div class="station-list" id="stationList"></div>
-        </section>
-
-        <div class="right-column">
-          <section class="panel selected-panel" aria-labelledby="detailTitle">
-            <div class="panel-head"><div><h2 class="panel-title" id="detailTitle">Detalle de estación</h2><div class="panel-caption">Información y acciones de control</div></div></div>
-            <div class="detail-body" id="detailBody"></div>
-            <div class="action-group" id="actionGroup"></div>
-          </section>
-          <section class="panel" aria-labelledby="activityTitle">
-            <div class="panel-head"><div><h2 class="panel-title" id="activityTitle">Actividad reciente</h2><div class="panel-caption">Últimos eventos de la red</div></div></div>
-            <div class="activity" id="activityList"></div>
-          </section>
-        </div>
+      <div class="api-area">
+        <div id="apiStatus" class="api-pill"><span class="status-dot"></span><span id="apiStatusText">Conectando con Central…</span></div>
+        <div class="connection-time">Actualizado <strong id="updatedAt">—</strong></div>
       </div>
-    </main>
-  </div>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </header>
+
+    <section class="summary" aria-label="Estado de Central">
+      <article class="summary-card">
+        <div class="summary-label"><span class="summary-symbol" aria-hidden="true">●</span>Estado de Central</div>
+        <strong id="centralStatus" class="summary-value unknown">Esperando datos…</strong>
+      </article>
+      <article class="summary-card">
+        <div class="summary-label"><span class="summary-symbol" aria-hidden="true">↗</span>Última petición o evento</div>
+        <strong id="lastRequest" class="summary-value">Esperando datos…</strong>
+      </article>
+    </section>
+
+    <section class="panel" aria-labelledby="stationsTitle">
+      <div class="panel-head">
+        <div><h2 class="panel-title" id="stationsTitle">Estaciones de riego</h2><div class="panel-caption">Los estados se actualizan automáticamente desde WM_Central.</div></div>
+        <span class="station-count"><span id="stationCount">—</span> estaciones</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID estación</th><th>Ubicación</th><th>Estado</th><th>Caudal</th><th>Volumen</th><th>Operario</th></tr></thead>
+          <tbody id="stationsBody"><tr><td class="table-message" colspan="6">Cargando estaciones desde WM_Central…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="footnote"><span>Lecturas de caudal en L/min y volumen en L.</span><span>Actualización automática cada segundo</span></div>
+    </section>
+  </main>
 
   <script>
-    const demoStations = [
-      { id: 'WS-01', location: 'Parque El Palmeral', status: 'REGANDO', flowRate: 12.4, volume: 86.2, operator: 'OP-01', updatedAt: new Date().toISOString() },
-      { id: 'WS-02', location: 'Jardín del Mar', status: 'DISPONIBLE', flowRate: null, volume: null, operator: null, updatedAt: new Date().toISOString() },
-      { id: 'WS-03', location: 'Plaza de las Flores', status: 'FUGA', flowRate: null, volume: null, operator: null, updatedAt: new Date().toISOString() },
-      { id: 'WS-08', location: 'Parque Norte', status: 'FUERA_SERVICIO', flowRate: null, volume: null, operator: null, updatedAt: new Date().toISOString() },
-      { id: 'WS-99', location: 'Jardines del Este', status: 'DESCONECTADA', flowRate: null, volume: null, operator: null, updatedAt: new Date().toISOString() }
-    ];
-    const labels = { DISPONIBLE: 'Disponible', REGANDO: 'Regando', FUGA: 'Fuga detectada', FUERA_SERVICIO: 'Fuera de servicio', DESCONECTADA: 'Desconectada' };
-    const classes = { DISPONIBLE: 'available', REGANDO: 'watering', FUGA: 'leak', FUERA_SERVICIO: 'blocked', DESCONECTADA: 'offline' };
-    let stations = structuredClone(demoStations);
-    let events = [
-      { type: 'watering', text: '<strong>WS-01</strong> inició un riego · Operario OP-01', time: 'Ahora' },
-      { type: 'warning', text: '<strong>WS-03</strong> reportó una fuga', time: 'Hace 8 min' },
-      { type: 'control', text: '<strong>WS-08</strong> fue puesta fuera de servicio', time: 'Hace 24 min' }
-    ];
-    let selectedId = 'WS-01';
-    let liveApi = false;
-    let toastTimer;
+    const statusLabels = {
+      DISPONIBLE: 'Disponible',
+      REGANDO: 'Regando',
+      FUGA: 'Fuga',
+      FUERA_SERVICIO: 'Fuera de servicio',
+      DESCONECTADA: 'Desconectada'
+    };
 
-    function statusClass(status) { return classes[status] || 'offline'; }
-    function statusLabel(status) { return labels[status] || status; }
-    function fmt(value, digits = 1) { return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—'; }
-    function niceTime(value) {
-      if (!value) return '—';
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[character]));
     }
-    function setConnection(isLive) {
-      liveApi = isLive;
-      const el = document.getElementById('connection');
-      el.classList.toggle('live', isLive);
-      document.getElementById('connectionText').textContent = isLive ? 'Central conectada' : 'Vista de demostración';
-      document.getElementById('demoBanner').hidden = isLive;
+
+    function normalizeStatus(value) {
+      const status = String(value ?? 'DESCONECTADA').trim().toUpperCase().replace(/[\s-]+/g, '_');
+      return Object.hasOwn(statusLabels, status) ? status : 'DESCONECTADA';
     }
-    function renderMetrics() {
-      document.getElementById('totalCount').textContent = stations.length;
-      document.getElementById('availableCount').textContent = stations.filter(s => s.status === 'DISPONIBLE').length;
-      document.getElementById('wateringCount').textContent = stations.filter(s => s.status === 'REGANDO').length;
-      document.getElementById('incidentCount').textContent = stations.filter(s => ['FUGA', 'DESCONECTADA'].includes(s.status)).length;
+
+    function formatNumber(value) {
+      if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—';
+      return Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    function renderStations() {
-      const query = document.getElementById('search').value.trim().toLocaleLowerCase('es');
-      const filter = document.getElementById('filter').value;
-      const filtered = stations.filter(s => {
-        const matchesQuery = `${s.id} ${s.location}`.toLocaleLowerCase('es').includes(query);
-        const matchesFilter = filter === 'TODAS' || (filter === 'INCIDENCIA' ? ['FUGA', 'DESCONECTADA'].includes(s.status) : s.status === filter);
-        return matchesQuery && matchesFilter;
-      });
-      const list = document.getElementById('stationList');
-      if (!filtered.length) { list.innerHTML = '<div class="empty">No hay estaciones que coincidan con el filtro.</div>'; return; }
-      list.innerHTML = filtered.map(s => {
-        const watering = s.status === 'REGANDO';
-        const flow = watering ? `<div>Caudal<strong class="water-value">${fmt(s.flowRate)} <span style="font-size:9px;font-weight:550">L/min</span></strong></div>` : `<div>Riego<strong>Sin actividad</strong></div>`;
-        const volume = watering ? `<div>Volumen<strong class="water-value">${fmt(s.volume)} <span style="font-size:9px;font-weight:550">L</span></strong></div>` : `<div>Operario<strong>${s.operator || '—'}</strong></div>`;
-        return `<article class="station ${s.id === selectedId ? 'selected' : ''}" data-id="${escapeHtml(s.id)}" tabindex="0" role="button" aria-label="Ver ${escapeHtml(s.id)}, ${statusLabel(s.status)}">
-          <div class="station-head"><div><div class="station-id">${escapeHtml(s.id)}</div><div class="station-location">⌖ &nbsp;${escapeHtml(s.location || 'Ubicación no indicada')}</div></div>
-          <span class="badge ${statusClass(s.status)}">${watering ? '<span class="dot pulse"></span>' : '<span class="dot"></span>'}${statusLabel(s.status)}</span></div>
-          <div class="station-meta">${flow}${volume}<div>Última señal<strong>${niceTime(s.updatedAt)}</strong></div></div>
-        </article>`;
-      }).join('');
-      list.querySelectorAll('.station').forEach(card => {
-        const select = () => { selectedId = card.dataset.id; renderStations(); renderDetail(); };
-        card.addEventListener('click', select);
-        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); } });
-      });
+
+    function setApiState(connected) {
+      const pill = document.getElementById('apiStatus');
+      pill.classList.toggle('connected', connected);
+      pill.classList.toggle('disconnected', !connected);
+      document.getElementById('apiStatusText').textContent = connected ? 'Central conectada' : 'Sin conexión con Central';
     }
-    function renderDetail() {
-      const s = stations.find(item => item.id === selectedId);
-      const body = document.getElementById('detailBody');
-      const actions = document.getElementById('actionGroup');
-      if (!s) { body.innerHTML = '<div class="empty">Selecciona una estación para ver sus detalles.</div>'; actions.innerHTML = ''; return; }
-      const watering = s.status === 'REGANDO';
-      body.innerHTML = `<div class="detail-main"><div><div class="detail-id">${escapeHtml(s.id)}</div><div class="detail-location">⌖ &nbsp;${escapeHtml(s.location || 'Ubicación no indicada')}</div></div><span class="badge ${statusClass(s.status)}">${watering ? '<span class="dot pulse"></span>' : '<span class="dot"></span>'}${statusLabel(s.status)}</span></div>
-        <div class="telemetry"><div class="telemetry-box"><div class="telemetry-label">Caudal actual</div><div class="telemetry-value">${watering ? fmt(s.flowRate) : '—'}<span class="telemetry-unit">L/min</span></div><div class="telemetry-foot">${watering ? 'Lectura en tiempo real' : 'Sin riego activo'}</div></div>
-        <div class="telemetry-box"><div class="telemetry-label">Volumen acumulado</div><div class="telemetry-value">${watering ? fmt(s.volume) : '—'}<span class="telemetry-unit">L</span></div><div class="telemetry-foot">${watering ? 'En este servicio' : 'Sin datos de servicio'}</div></div></div>
-        <div class="detail-row"><span>Operario asignado</span><strong>${escapeHtml(s.operator || 'Ninguno')}</strong></div>
-        <div class="detail-row"><span>Última actualización</span><strong>${niceTime(s.updatedAt)}</strong></div>
-        <div class="detail-row"><span>Identificador</span><strong>${escapeHtml(s.id)}</strong></div>`;
-      actions.innerHTML = `<button class="action primary" data-command="start" ${s.status !== 'DISPONIBLE' ? 'disabled' : ''}>▶ &nbsp;Iniciar riego</button>
-        <button class="action danger" data-command="block" ${s.status === 'DESCONECTADA' || s.status === 'FUERA_SERVICIO' ? 'disabled' : ''}>■ &nbsp;Bloquear estación</button>
-        <button class="action" data-command="activate" ${s.status !== 'FUERA_SERVICIO' ? 'disabled' : ''}>✓ &nbsp;Activar estación</button>
-        <button class="action" data-command="stop" ${!watering ? 'disabled' : ''}>Ⅱ &nbsp;Finalizar riego</button>`;
-      actions.querySelectorAll('button[data-command]').forEach(button => button.addEventListener('click', () => runCommand(button.dataset.command, s)));
-    }
-    function renderEvents() {
-      const list = document.getElementById('activityList');
-      list.innerHTML = events.slice(0, 5).map(e => `<div class="event"><div class="event-icon ${e.type === 'warning' ? 'warning' : ''}">${e.type === 'warning' ? '!' : e.type === 'watering' ? '≈' : '↗'}</div><div class="event-text">${e.text}</div><div class="event-time">${e.time}</div></div>`).join('') || '<div class="empty">Todavía no hay eventos.</div>';
-    }
-    async function runCommand(command, station) {
-      const labels = { start: 'INICIAR_RIEGO', block: 'FUERA_SERVICIO', activate: 'DISPONIBLE', stop: 'FINALIZAR_RIEGO' };
-      if (liveApi) {
-        try {
-          const response = await fetch(`/api/stations/${encodeURIComponent(station.id)}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: labels[command] }) });
-          if (!response.ok) throw new Error('La Central rechazó la orden.');
-          await loadStations();
-          showToast(`Orden ${labels[command]} enviada a ${station.id}.`);
-          return;
-        } catch (err) { showToast(err.message || 'No se pudo enviar la orden.'); return; }
+
+    function renderStations(stations) {
+      const body = document.getElementById('stationsBody');
+      document.getElementById('stationCount').textContent = stations.length;
+      if (!stations.length) {
+        body.innerHTML = '<tr><td class="table-message" colspan="6">No hay estaciones registradas en Central.</td></tr>';
+        return;
       }
-      const next = { start: 'REGANDO', block: 'FUERA_SERVICIO', activate: 'DISPONIBLE', stop: 'DISPONIBLE' }[command];
-      station.status = next;
-      station.updatedAt = new Date().toISOString();
-      if (command === 'start') { station.operator = 'OP-01'; station.flowRate = 11.8; station.volume = 0; }
-      if (command === 'stop' || command === 'block') { station.operator = null; station.flowRate = null; station.volume = null; }
-      if (command === 'activate') { station.operator = null; }
-      events.unshift({ type: command === 'block' ? 'warning' : command === 'start' ? 'watering' : 'control', text: `<strong>${escapeHtml(station.id)}</strong> · acción simulada: ${labels[command]}`, time: 'Ahora' });
-      renderAll();
-      showToast(`Vista de demostración: ${labels[command]} en ${station.id}.`);
+
+      body.innerHTML = stations.map(station => {
+        const status = normalizeStatus(station.estado ?? station.status);
+        const watering = status === 'REGANDO';
+        const flow = watering ? `${formatNumber(station.caudal ?? station.flowRate)} <span class="muted-value">L/min</span>` : '<span class="muted-value">—</span>';
+        const volume = watering ? `${formatNumber(station.volumen ?? station.volume)} <span class="muted-value">L</span>` : '<span class="muted-value">—</span>';
+        const operator = watering ? (station.operario ?? station.operator ?? '—') : '—';
+        return `<tr class="row-${status}">
+          <td><strong class="station-id">${escapeHtml(station.id ?? station.id_estacion ?? '—')}</strong></td>
+          <td class="location">${escapeHtml(station.ubicacion ?? station.location ?? '—')}</td>
+          <td><span class="badge ${status}">${statusLabels[status]}</span></td>
+          <td class="reading">${flow}</td>
+          <td class="reading">${volume}</td>
+          <td>${escapeHtml(operator)}</td>
+        </tr>`;
+      }).join('');
     }
-    async function loadStations() {
+
+    async function actualizarPanel() {
       try {
-        const response = await fetch('/api/stations', { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
-        if (!response.ok) throw new Error('API no disponible');
+        const response = await fetch('/api/status', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Formato de API no válido');
-        stations = data.map(row => ({
-          id: row.id,
-          location: row.location ?? row.ubicacion ?? '',
-          status: row.status ?? row.estado ?? 'DESCONECTADA',
-          flowRate: row.flowRate ?? row.caudal_lpm ?? null,
-          volume: row.volume ?? row.volumen_l ?? null,
-          operator: row.operator ?? row.operario ?? null,
-          updatedAt: row.updatedAt ?? row.actualizado ?? null
-        }));
-        if (!stations.some(s => s.id === selectedId)) selectedId = stations[0]?.id || null;
-        setConnection(true);
-        renderAll();
-      } catch (_) { setConnection(false); }
+        if (!data || !Array.isArray(data.stations)) throw new Error('Formato de respuesta no válido');
+
+        setApiState(true);
+        const central = data.central ?? 'Sin dato';
+        const centralEl = document.getElementById('centralStatus');
+        centralEl.textContent = central;
+        centralEl.className = `summary-value ${/operativ|\bok\b|conectad/i.test(String(central)) ? 'good' : 'unknown'}`;
+        document.getElementById('lastRequest').textContent = data.ultima_peticion || 'Sin peticiones recientes';
+        document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        renderStations(data.stations);
+      } catch (_) {
+        setApiState(false);
+        const centralEl = document.getElementById('centralStatus');
+        centralEl.textContent = 'Sin respuesta de la API';
+        centralEl.className = 'summary-value bad';
+        document.getElementById('stationCount').textContent = '—';
+        document.getElementById('stationsBody').innerHTML = '<tr><td class="table-message" colspan="6">No se han podido cargar los datos de WM_Central.</td></tr>';
+      } finally {
+        window.setTimeout(actualizarPanel, 1000);
+      }
     }
-    function renderAll() { renderMetrics(); renderStations(); renderDetail(); renderEvents(); document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
-    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-    function showToast(message) { const toast = document.getElementById('toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2800); }
-    document.getElementById('search').addEventListener('input', renderStations);
-    document.getElementById('filter').addEventListener('change', renderStations);
-    renderAll();
-    loadStations();
-    setInterval(() => { if (liveApi) loadStations(); }, 2000);
+
+    actualizarPanel();
   </script>
 </body>
 </html>
