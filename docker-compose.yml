@@ -30,7 +30,7 @@ services:
       build:
         context: .
         dockerfile: Dockerfile
-      command: ["./WM_Central", "8080", "broker:29092"] 
+      command: ["./central_app", "8080", "broker:29092"]
       ports:
         - "8080:8080" 
         - "8081:8081"
@@ -46,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.FO
-    command: ["./WM_FO", "broker:29092", "OP-01", "rutinas.txt"]
+    command: ["./fo_app", "broker:29092", "OP-01", "rutinas.txt"]
     stdin_open: true 
     tty: true
     volumes:
@@ -59,7 +59,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.FO
-    command: ["./WM_FO", "broker:29092", "OP-02"]
+    command: ["./fo_app", "broker:29092", "OP-02"]
     stdin_open: true
     tty: true
     volumes:

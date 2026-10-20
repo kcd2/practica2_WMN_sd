@@ -139,29 +139,45 @@
       DESCONECTADA: 'Desconectada'
     };
 
+    // Escapa caracteres especiales antes de mostrarlos como texto.
     function escapeHtml(value) {
-      return String(value ?? '').replace(/[&<>"']/g, character => ({
+      return String(value ?? '').replace(/[&<>"']/g,
+        // Cambia cada carácter especial por su entidad HTML equivalente.
+        character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      }[character]));
+        }[character]));
     }
 
+    // Convierte el estado recibido al formato de la interfaz.
     function normalizeStatus(value) {
       const status = String(value ?? 'DESCONECTADA').trim().toUpperCase().replace(/[\s-]+/g, '_');
-      return Object.hasOwn(statusLabels, status) ? status : 'DESCONECTADA';
+      if (Object.hasOwn(statusLabels, status)) {
+        return status;
+      }
+      return 'DESCONECTADA';
     }
 
+    // Da formato a una lectura numérica para mostrarla en pantalla.
     function formatNumber(value) {
-      if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—';
+      if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
+        return '—';
+      }
       return Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // Actualiza el indicador de conexión con Central.
     function setApiState(connected) {
       const pill = document.getElementById('apiStatus');
       pill.classList.toggle('connected', connected);
       pill.classList.toggle('disconnected', !connected);
-      document.getElementById('apiStatusText').textContent = connected ? 'Central conectada' : 'Sin conexión con Central';
+      let statusText = 'Sin conexión con Central';
+      if (connected) {
+        statusText = 'Central conectada';
+      }
+      document.getElementById('apiStatusText').textContent = statusText;
     }
 
+    // Construye las filas de la tabla con las estaciones recibidas.
     function renderStations(stations) {
       const body = document.getElementById('stationsBody');
       document.getElementById('stationCount').textContent = stations.length;
@@ -171,11 +187,25 @@
       }
 
       body.innerHTML = stations.map(station => {
+        // Prepara una fila con el estado y las lecturas de esta estación.
         const status = normalizeStatus(station.estado ?? station.status);
         const watering = status === 'REGANDO';
-        const flow = watering ? `${formatNumber(station.caudal ?? station.flowRate)} <span class="muted-value">L/min</span>` : '<span class="muted-value">—</span>';
-        const volume = watering ? `${formatNumber(station.volumen ?? station.volume)} <span class="muted-value">L</span>` : '<span class="muted-value">—</span>';
-        const operator = watering ? (station.operario ?? station.operator ?? '—') : '—';
+        let flow = '<span class="muted-value">—</span>';
+        let volume = '<span class="muted-value">—</span>';
+        let operator = '—';
+        if (watering) {
+          let flowValue = station.caudal;
+          let volumeValue = station.volumen;
+          operator = station.operario ?? station.operator ?? '—';
+          if (flowValue === null || flowValue === undefined) {
+            flowValue = station.flowRate;
+          }
+          if (volumeValue === null || volumeValue === undefined) {
+            volumeValue = station.volume;
+          }
+          flow = `${formatNumber(flowValue)} <span class="muted-value">L/min</span>`;
+          volume = `${formatNumber(volumeValue)} <span class="muted-value">L</span>`;
+        }
         return `<tr class="row-${status}">
           <td><strong class="station-id">${escapeHtml(station.id ?? station.id_estacion ?? '—')}</strong></td>
           <td class="location">${escapeHtml(station.ubicacion ?? station.location ?? '—')}</td>
@@ -187,18 +217,25 @@
       }).join('');
     }
 
+    // Consulta la API y refresca los datos del panel.
     async function actualizarPanel() {
       try {
         const response = await fetch('/api/status', { headers: { Accept: 'application/json' }, cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        if (!data || !Array.isArray(data.stations)) throw new Error('Formato de respuesta no válido');
+        if (!data || !Array.isArray(data.stations)) {
+          throw new Error('Formato de respuesta no válido');
+        }
 
         setApiState(true);
         const central = data.central ?? 'Sin dato';
         const centralEl = document.getElementById('centralStatus');
         centralEl.textContent = central;
-        centralEl.className = `summary-value ${/operativ|\bok\b|conectad/i.test(String(central)) ? 'good' : 'unknown'}`;
+        let centralClass = 'unknown';
+        if (/operativ|\bok\b|conectad/i.test(String(central))) {
+          centralClass = 'good';
+        }
+        centralEl.className = `summary-value ${centralClass}`;
         document.getElementById('lastRequest').textContent = data.ultima_peticion || 'Sin peticiones recientes';
         document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         renderStations(data.stations);

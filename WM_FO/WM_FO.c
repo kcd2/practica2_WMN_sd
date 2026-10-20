@@ -6,7 +6,6 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <librdkafka/rdkafka.h>
@@ -15,24 +14,34 @@
 #define TOPIC_RESPUESTAS "wm_respuestas_fo"
 
 int linea_checkpoint_actual = -1;
-volatile int error_entrega_fo = 0;
+int error_entrega_fo = 0;
 
 /* Guarda el punto de reanudación del operario antes de enviar o esperar una petición. */
 int guardar_checkpoint(const char *id_estacion, int linea, const char *estado) {
     mkdir("fo_data", 0777);
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
-    if (file == NULL) return -1;
+    if (file == NULL) {
+        return -1;
+    }
     int escrito = fprintf(file, "%s\n%d\n%s\n", id_estacion, linea, estado) > 0;
-    if (escrito && fflush(file) != 0) escrito = 0;
-    if (escrito && fsync(fileno(file)) != 0) escrito = 0;
-    if (fclose(file) != 0) escrito = 0;
-    if (escrito) return 0;
+    if (escrito && fflush(file) != 0) {
+        escrito = 0;
+    }
+    if (fclose(file) != 0) {
+        escrito = 0;
+    }
+    if (escrito) {
+        return 0;
+    }
     return -1;
 }
 
+// Lee la operación guardada para poder reanudarla.
 int leer_checkpoint(char *id_estacion, size_t tam, int *linea, char *estado, size_t tam_estado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
-    if (file == NULL) return 0;
+    if (file == NULL) {
+        return 0;
+    }
     char numero_linea[32];
     int leido = fgets(id_estacion, (int)tam, file) != NULL;
     if (leido) {
@@ -41,24 +50,32 @@ int leer_checkpoint(char *id_estacion, size_t tam, int *linea, char *estado, siz
     }
     if (leido) {
         numero_linea[strcspn(numero_linea, "\r\n")] = '\0';
-        if (sscanf(numero_linea, "%d", linea) != 1) *linea = -1;
+        if (sscanf(numero_linea, "%d", linea) != 1) {
+            *linea = -1;
+        }
         snprintf(estado, tam_estado, "WAITING");
         if (fgets(estado, (int)tam_estado, file) != NULL) {
             estado[strcspn(estado, "\r\n")] = '\0';
         }
-        if (id_estacion[0] == '\0') leido = 0;
+        if (id_estacion[0] == '\0') {
+            leido = 0;
+        }
     }
     fclose(file);
     return leido;
 }
 
+// Borra el checkpoint cuando ya no queda una operación pendiente.
 void limpiar_checkpoint(void) {
     remove("fo_data/operacion_pendiente.txt");
 }
 
+// Lee el último resultado guardado del operario.
 int leer_checkpoint_completado(char *topic, size_t tam_topic, int *particion, long long *offset, char *resultado, size_t tam_resultado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
-    if (file == NULL) return 0;
+    if (file == NULL) {
+        return 0;
+    }
     char linea[1024];
     int completado = 0;
     if (fgets(linea, sizeof(linea), file) != NULL &&
@@ -83,38 +100,52 @@ int leer_checkpoint_completado(char *topic, size_t tam_topic, int *particion, lo
     return completado;
 }
 
+// Confirma a Kafka los mensajes ya guardados en el checkpoint.
 int confirmar_offset_guardado(rd_kafka_t *rk_consumer, const char *topic, int particion, long long offset) {
     rd_kafka_topic_partition_list_t *offsets = rd_kafka_topic_partition_list_new(1);
-    if (offsets == NULL) return -1;
+    if (offsets == NULL) {
+        return -1;
+    }
     rd_kafka_topic_partition_t *elemento = rd_kafka_topic_partition_list_add(offsets, topic, particion);
     if (elemento == NULL) {
         rd_kafka_topic_partition_list_destroy(offsets);
         return -1;
     }
-    elemento->offset = (rd_kafka_offset_t)(offset + 1);
+    elemento->offset = offset + 1;
     rd_kafka_resp_err_t error = rd_kafka_commit(rk_consumer, offsets, 0);
     rd_kafka_topic_partition_list_destroy(offsets);
-    if (error == RD_KAFKA_RESP_ERR_NO_ERROR) return 0;
+    if (error == RD_KAFKA_RESP_ERR_NO_ERROR) {
+        return 0;
+    }
     return -1;
 }
 
+// Guarda el resultado recibido y su posición en Kafka.
 int guardar_resultado_checkpoint(const char *id_estacion, int linea, rd_kafka_message_t *mensaje, const char *resultado) {
     const char *topic = rd_kafka_topic_name(mensaje->rkt);
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
     if (file == NULL || topic == NULL) {
-        if (file != NULL) fclose(file);
+        if (file != NULL) {
+            fclose(file);
+        }
         return -1;
     }
     int escrito = fprintf(file, "%s\n%d\nDONE\n%s\n%d\n%lld\n%s\n",
                           id_estacion, linea, topic, mensaje->partition,
                           (long long)mensaje->offset, resultado) > 0;
-    if (escrito && fflush(file) != 0) escrito = 0;
-    if (escrito && fsync(fileno(file)) != 0) escrito = 0;
-    if (fclose(file) != 0) escrito = 0;
-    if (escrito) return 0;
+    if (escrito && fflush(file) != 0) {
+        escrito = 0;
+    }
+    if (fclose(file) != 0) {
+        escrito = 0;
+    }
+    if (escrito) {
+        return 0;
+    }
     return -1;
 }
 
+// Confirma a Kafka que el mensaje ya se procesó.
 int confirmar_mensaje(rd_kafka_t *rk_consumer, rd_kafka_message_t *mensaje) {
     rd_kafka_resp_err_t error = rd_kafka_commit_message(rk_consumer, mensaje, 0);
     if (error != RD_KAFKA_RESP_ERR_NO_ERROR) {
@@ -124,12 +155,16 @@ int confirmar_mensaje(rd_kafka_t *rk_consumer, rd_kafka_message_t *mensaje) {
     return 0;
 }
 
+// Anota si Kafka confirmó la entrega del mensaje del operario.
 void confirmar_entrega_fo(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, void *opaque) {
     (void)rk;
     (void)opaque;
-    if (mensaje->err != RD_KAFKA_RESP_ERR_NO_ERROR) error_entrega_fo = 1;
+    if (mensaje->err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+        error_entrega_fo = 1;
+    }
 }
 
+// Publica un mensaje en Kafka y reintenta si falla el envío.
 int publicar_mensaje(rd_kafka_t *rk_producer, rd_kafka_topic_t *topic, const char *payload) {
     int intentos = 0;
     int en_cola = 0;
@@ -138,12 +173,18 @@ int publicar_mensaje(rd_kafka_t *rk_producer, rd_kafka_topic_t *topic, const cha
             error_entrega_fo = 0;
             int producido = rd_kafka_produce(topic, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
                                              (void *)payload, strlen(payload), NULL, 0, NULL);
-            if (producido == 0) en_cola = 1;
+            if (producido == 0) {
+                en_cola = 1;
+            }
         }
         if (en_cola) {
             rd_kafka_resp_err_t vaciado = rd_kafka_flush(rk_producer, 5000);
-            if (vaciado == RD_KAFKA_RESP_ERR_NO_ERROR && !error_entrega_fo) return 0;
-            if (vaciado == RD_KAFKA_RESP_ERR_NO_ERROR && error_entrega_fo) en_cola = 0;
+            if (vaciado == RD_KAFKA_RESP_ERR_NO_ERROR && !error_entrega_fo) {
+                return 0;
+            }
+            if (vaciado == RD_KAFKA_RESP_ERR_NO_ERROR && error_entrega_fo) {
+                en_cola = 0;
+            }
         }
         fprintf(stderr, "[FO] Kafka no confirmó el envío; reintentando (%d/5).\n", intentos + 1);
         rd_kafka_poll(rk_producer, 0);
@@ -153,12 +194,15 @@ int publicar_mensaje(rd_kafka_t *rk_producer, rd_kafka_topic_t *topic, const cha
     return -1;
 }
 
+// Guarda el resultado y confirma el mensaje recibido.
 int completar_operacion(rd_kafka_t *rk_consumer, const char *id_estacion, rd_kafka_message_t *mensaje, const char *resultado) {
     if (guardar_resultado_checkpoint(id_estacion, linea_checkpoint_actual, mensaje, resultado) != 0) {
         fprintf(stderr, "[FO] No se pudo guardar el resultado; el offset queda pendiente.\n");
         return 0;
     }
-    if (confirmar_mensaje(rk_consumer, mensaje) != 0) return 0;
+    if (confirmar_mensaje(rk_consumer, mensaje) != 0) {
+        return 0;
+    }
     return 1;
 }
 
@@ -170,8 +214,8 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
 
     while (1) {
         if (time(NULL) - inicio_espera >= 45) {
-            printf(">>> [ERROR] Tiempo de espera agotado esperando respuesta de WM_Central para %s.\n\n", id_estacion_esperada);
-            break;
+            printf(">>> [AVISO] La operación en %s sigue pendiente. Se conserva y continúa la espera de WM_Central.\n\n", id_estacion_esperada);
+            inicio_espera = time(NULL);
         }
         rd_kafka_message_t *rkmessage = rd_kafka_consumer_poll(rk_consumer, 1000);
 
@@ -194,8 +238,12 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                     if (strcmp(resultado, "TELEMETRIA") == 0 && strcmp(id_op, id_operador_actual) == 0) {
                         const char *caudal = detalle;
                         const char *volumen = valor;
-                        if (caudal == NULL) caudal = "0";
-                        if (volumen == NULL) volumen = "0";
+                        if (caudal == NULL) {
+                            caudal = "0";
+                        }
+                        if (volumen == NULL) {
+                            volumen = "0";
+                        }
                         printf("[TELEMETRIA %s] Caudal: %s L/min | Volumen acumulado: %s L\n",
                                id_est, caudal, volumen);
                         riego_en_curso = 1;
@@ -221,9 +269,15 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                             const char *causa = detalle;
                             const char *volumen = valor;
                             const char *tiempo = duracion;
-                            if (causa == NULL) causa = "AVERIA";
-                            if (volumen == NULL) volumen = "0";
-                            if (tiempo == NULL) tiempo = "0";
+                            if (causa == NULL) {
+                                causa = "AVERIA";
+                            }
+                            if (volumen == NULL) {
+                                volumen = "0";
+                            }
+                            if (tiempo == NULL) {
+                                tiempo = "0";
+                            }
                             printf(">>> [AVISO] Riego en %s interrumpido por %s. Parcial: %s L en %s s. Esperando cierre de la operación...\n",
                                    id_est, causa, volumen, tiempo);
                             riego_en_curso = 1;
@@ -245,9 +299,15 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                         const char *causa = detalle;
                         const char *volumen = valor;
                         const char *tiempo = duracion;
-                        if (causa == NULL) causa = "AVERIA";
-                        if (volumen == NULL) volumen = "0";
-                        if (tiempo == NULL) tiempo = "0";
+                        if (causa == NULL) {
+                            causa = "AVERIA";
+                        }
+                        if (volumen == NULL) {
+                            volumen = "0";
+                        }
+                        if (tiempo == NULL) {
+                            tiempo = "0";
+                        }
                         printf(">>> [AVISO] Riego en %s interrumpido por %s. Parcial: %s L en %s s. Esperando cierre de la operación...\n",
                                id_est, causa, volumen, tiempo);
                     }
@@ -283,7 +343,9 @@ void solicitar_estaciones_disponibles(rd_kafka_t *rk_producer, rd_kafka_topic_t 
     int recibio_fin = 0;
     while (!recibio_fin && time(NULL) - inicio < 8) {
         rd_kafka_message_t *mensaje = rd_kafka_consumer_poll(rk_consumer, 1000);
-        if (!mensaje) continue;
+        if (!mensaje) {
+            continue;
+        }
         if (!mensaje->err && mensaje->payload) {
             char payload[512];
             snprintf(payload, sizeof(payload), "%.*s", (int)mensaje->len, (char *)mensaje->payload);
@@ -309,18 +371,25 @@ void solicitar_estaciones_disponibles(rd_kafka_t *rk_producer, rd_kafka_topic_t 
                     }
                     printf("- %s | %s | %s\n", id_texto, ubicacion_texto, estado_texto);
                 } else if (strcmp(tipo, "LISTA_FIN") == 0) {
-                    if (id && atoi(id) == 0) printf("No hay estaciones DISPONIBLES en este momento.\n");
+                    if (id && atoi(id) == 0) {
+                        printf("No hay estaciones DISPONIBLES en este momento.\n");
+                    }
                     recibio_fin = 1;
                 }
             }
         }
-        if (!mensaje->err) confirmar_mensaje(rk_consumer, mensaje);
+        if (!mensaje->err) {
+            confirmar_mensaje(rk_consumer, mensaje);
+        }
         rd_kafka_message_destroy(mensaje);
     }
-    if (!recibio_fin) printf("No se recibió la lista de WM_Central dentro del tiempo esperado.\n");
+    if (!recibio_fin) {
+        printf("No se recibió la lista de WM_Central dentro del tiempo esperado.\n");
+    }
     printf("\n");
 }
 
+// Inicia la aplicación del operario y atiende sus solicitudes.
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
     sleep(20); // Espera a que Central (10s) y Monitor hayan registrado las estaciones
@@ -395,7 +464,9 @@ int main(int argc, char *argv[]) {
                                                      resultado_completado, sizeof(resultado_completado))) {
         printf("[RECUPERACION] Resultado guardado para %s: %s\n", estacion_pendiente, resultado_completado);
         rd_kafka_message_t *mensaje_asignacion = rd_kafka_consumer_poll(rk_consumer, 1000);
-        if (mensaje_asignacion != NULL) rd_kafka_message_destroy(mensaje_asignacion);
+        if (mensaje_asignacion != NULL) {
+            rd_kafka_message_destroy(mensaje_asignacion);
+        }
         if (confirmar_offset_guardado(rk_consumer, topic_completado, particion_completada, offset_completado) != 0) {
             fprintf(stderr, "[RECUPERACION] No se pudo confirmar el resultado guardado en Kafka.\n");
             rd_kafka_topic_destroy(topic_peticiones);
@@ -433,16 +504,10 @@ int main(int argc, char *argv[]) {
     } else {
         rd_kafka_message_t *mensaje_inicial = rd_kafka_consumer_poll(rk_consumer, 1000);
         if (mensaje_inicial != NULL) {
-            if (!mensaje_inicial->err) confirmar_mensaje(rk_consumer, mensaje_inicial);
+            if (!mensaje_inicial->err) {
+                confirmar_mensaje(rk_consumer, mensaje_inicial);
+            }
             rd_kafka_message_destroy(mensaje_inicial);
-        }
-        if (rd_kafka_commit(rk_consumer, NULL, 0) != RD_KAFKA_RESP_ERR_NO_ERROR) {
-            fprintf(stderr, "[FO] No se pudo guardar el offset inicial del consumidor.\n");
-            rd_kafka_topic_destroy(topic_peticiones);
-            rd_kafka_destroy(rk_producer);
-            rd_kafka_consumer_close(rk_consumer);
-            rd_kafka_destroy(rk_consumer);
-            return 1;
         }
     }
 
@@ -459,9 +524,13 @@ int main(int argc, char *argv[]) {
         int continuar = 1;
         while (fgets(id_estacion, sizeof(id_estacion), file)) {
             numero_linea++;
-            if (numero_linea <= linea_pendiente) continue;
+            if (numero_linea <= linea_pendiente) {
+                continue;
+            }
             id_estacion[strcspn(id_estacion, "\r\n")] = '\0';
-            if (strlen(id_estacion) == 0) continue;
+            if (strlen(id_estacion) == 0) {
+                continue;
+            }
 
             char payload[256];
             snprintf(payload, sizeof(payload), "%s#%s", id_operador, id_estacion);
@@ -492,17 +561,25 @@ int main(int argc, char *argv[]) {
             sleep(4);
         }
         fclose(file);
-        if (continuar) printf("[MODO AUTOMATICO] Fichero procesado al 100%%.\n");
+        if (continuar) {
+            printf("[MODO AUTOMATICO] Fichero procesado al 100%%.\n");
+        }
     } else {
         printf("[MODO MANUAL] Escribe un ID para solicitar riego, 'listar' para consultar estaciones o 'salir':\n");
         char entrada[128];
         while (1) {
             printf("\nFO-%s > ", id_operador);
-            if (!fgets(entrada, sizeof(entrada), stdin)) break;
+            if (!fgets(entrada, sizeof(entrada), stdin)) {
+                break;
+            }
 
             entrada[strcspn(entrada, "\r\n")] = '\0';
-            if (strcmp(entrada, "salir") == 0) break;
-            if (strlen(entrada) == 0) continue;
+            if (strcmp(entrada, "salir") == 0) {
+                break;
+            }
+            if (strlen(entrada) == 0) {
+                continue;
+            }
             if (strcasecmp(entrada, "listar") == 0) {
                 solicitar_estaciones_disponibles(rk_producer, topic_peticiones, rk_consumer, id_operador);
                 continue;

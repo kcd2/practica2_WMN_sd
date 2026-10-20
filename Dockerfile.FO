@@ -2,5 +2,5 @@ FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y gcc librdkafka-dev
 WORKDIR /app
 COPY . .
-RUN gcc -o WM_FO WM_FO/WM_FO.c -lrdkafka
-CMD ["./WM_FO", "broker:29092", "OP-01"]
+RUN gcc -o fo_app WM_FO/WM_FO.c -lrdkafka
+CMD ["./fo_app", "broker:29092", "OP-01"]

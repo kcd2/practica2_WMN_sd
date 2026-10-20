@@ -3,5 +3,5 @@ RUN apt-get update && apt-get install -y gcc sqlite3 libsqlite3-dev librdkafka-d
 WORKDIR /app
 COPY . .
 RUN mkdir -p /app/db_data
-RUN gcc -o WM_Central WM_Central/WM_Central.c -lsqlite3 -lrdkafka -lpthread
-CMD ["./WM_Central", "8080", "broker:29092"]
+RUN gcc -o central_app WM_Central/WM_Central.c -lsqlite3 -lrdkafka -lpthread
+CMD ["./central_app", "8080", "broker:29092"]

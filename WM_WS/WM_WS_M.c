@@ -6,9 +6,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/select.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -24,22 +22,26 @@ char *ubicacion;
 
 int s_local_servidor = -1;
 int s_engine_cliente = -1;
-volatile int engine_conectado = 0;
-volatile int en_fuga = 0;        // 0 = DISPONIBLE, 1 = FUGA
-volatile int comando_engine = 0; // 0 = PING normal, 1 = DETENER_FUGA, 2 = RESTABLECER
-volatile int central_conectada = 0;
+int engine_conectado = 0;
+int en_fuga = 0;        // 0 = DISPONIBLE, 1 = FUGA
+int comando_engine = 0; // 0 = PING normal, 1 = DETENER_FUGA, 2 = RESTABLECER
+int central_conectada = 0;
+pthread_mutex_t mutex_estado_monitor = PTHREAD_MUTEX_INITIALIZER;
 
+// Cierra los sockets del Monitor cuando termina el proceso.
 void finalizar(int sig)
 {
     printf("\n[MONITOR] Cerrando sockets y finalizando ejecucion...\n");
-    if (s_engine_cliente != -1) close(s_engine_cliente);
-    if (s_local_servidor != -1) close(s_local_servidor);
+    if (s_engine_cliente != -1) {
+        close(s_engine_cliente);
+    }
+    if (s_local_servidor != -1) {
+        close(s_local_servidor);
+    }
     exit(0);
 }
 
-/* =========================================================================
- * FUNCION CLIENTE TCP CON SOPORTE DNS Y VALIDACION DE STATUS#OK
- * ========================================================================= */
+// Envía un mensaje a Central y recoge su respuesta.
 int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta)
 {
     struct sockaddr_in direccion;
@@ -52,7 +54,9 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s == -1)
     {
-        if (!es_latido) fprintf(stderr, "Error. No se puede abrir el socket\n");
+        if (!es_latido) {
+            fprintf(stderr, "Error. No se puede abrir el socket\n");
+        }
         return -1;
     }
 
@@ -60,7 +64,9 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     he = gethostbyname(servidor_ip);
     if (he == NULL)
     {
-        if (!es_latido) fprintf(stderr, "Error. No se puede resolver el host/IP de Central: %s\n", servidor_ip);
+        if (!es_latido) {
+            fprintf(stderr, "Error. No se puede resolver el host/IP de Central: %s\n", servidor_ip);
+        }
         close(s);
         return -1;
     }
@@ -70,58 +76,48 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     direccion.sin_port = htons(atoi(servidor_puerto));
     memcpy(&direccion.sin_addr, he->h_addr_list[0], he->h_length);
 
-    int flags = fcntl(s, F_GETFL, 0);
-    if (flags == -1 || fcntl(s, F_SETFL, flags | O_NONBLOCK) == -1) {
-        close(s);
-        central_conectada = 0;
-        return -1;
-    }
-    int conexion = connect(s, (struct sockaddr *)&direccion, sizeof(direccion));
-    if (conexion == -1 && errno != EINPROGRESS) {
-        if (!es_latido) fprintf(stderr, "Error. No se puede conectar al servidor (%s:%s)\n", servidor_ip, servidor_puerto);
-        close(s);
-        central_conectada = 0;
-        return -1;
-    }
-    if (conexion == -1) {
-        fd_set conjunto;
-        FD_ZERO(&conjunto);
-        FD_SET(s, &conjunto);
-        struct timeval espera;
-        espera.tv_sec = 2;
-        espera.tv_usec = 0;
-        int seleccionado = select(s + 1, NULL, &conjunto, NULL, &espera);
-        int error_socket = 0;
-        socklen_t tam_error = sizeof(error_socket);
-        if (seleccionado <= 0 || getsockopt(s, SOL_SOCKET, SO_ERROR, &error_socket, &tam_error) == -1 || error_socket != 0) {
-            if (!es_latido) fprintf(stderr, "Error. No se puede conectar al servidor (%s:%s)\n", servidor_ip, servidor_puerto);
-            close(s);
-            central_conectada = 0;
-            return -1;
-        }
-    }
-    if (fcntl(s, F_SETFL, flags) == -1) {
-        close(s);
-        central_conectada = 0;
-        return -1;
-    }
     struct timeval timeout;
     timeout.tv_sec = 2;
     timeout.tv_usec = 0;
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1 ||
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == -1) {
+        if (!es_latido) {
+            fprintf(stderr, "Error configurando el tiempo de espera del socket\n");
+        }
+        close(s);
+        pthread_mutex_lock(&mutex_estado_monitor);
+        central_conectada = 0;
+        pthread_mutex_unlock(&mutex_estado_monitor);
+        return -1;
+    }
+    if (connect(s, (struct sockaddr *)&direccion, sizeof(direccion)) == -1) {
+        if (!es_latido) {
+            fprintf(stderr, "Error. No se puede conectar al servidor (%s:%s)\n", servidor_ip, servidor_puerto);
+        }
+        close(s);
+        pthread_mutex_lock(&mutex_estado_monitor);
+        central_conectada = 0;
+        pthread_mutex_unlock(&mutex_estado_monitor);
+        return -1;
+    }
 
     /**** Enviar mensaje ****/
     n = strlen(mensaje);
     enviados = write(s, mensaje, n);
     if (enviados == -1 || enviados < n)
     {
-        if (!es_latido) fprintf(stderr, "Error enviando la trama a WM_Central\n");
+        if (!es_latido) {
+            fprintf(stderr, "Error enviando la trama a WM_Central\n");
+        }
+        pthread_mutex_lock(&mutex_estado_monitor);
         central_conectada = 0;
+        pthread_mutex_unlock(&mutex_estado_monitor);
         close(s);
         return -1;
     }
-    if (!es_latido) printf("[MONITOR] Trama enviada a Central: %s", mensaje);
+    if (!es_latido) {
+        printf("[MONITOR] Trama enviada a Central: %s", mensaje);
+    }
 
     /**** Recibir respuesta ****/
     n = tam_respuesta - 1;
@@ -129,29 +125,42 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
 
     if (recibidos == -1)
     {
-        if (!es_latido) fprintf(stderr, "Error recibiendo respuesta de WM_Central\n");
+        if (!es_latido) {
+            fprintf(stderr, "Error recibiendo respuesta de WM_Central\n");
+        }
+        pthread_mutex_lock(&mutex_estado_monitor);
         central_conectada = 0;
+        pthread_mutex_unlock(&mutex_estado_monitor);
         close(s);
         return -1;
     }
     respuesta[recibidos] = '\0';
-    if (!es_latido) printf("[MONITOR] Respuesta de WM_Central: %s\n", respuesta);
+    if (!es_latido) {
+        printf("[MONITOR] Respuesta de WM_Central: %s\n", respuesta);
+    }
 
     /**** Validar que la respuesta comience por STATUS#OK ****/
     if (strncmp(respuesta, "STATUS#OK", 9) != 0)
     {
-        if (!es_latido) fprintf(stderr, "[MONITOR] Error: La Central rechazo la trama o devolvio un estado no valido.\n");
+        if (!es_latido) {
+            fprintf(stderr, "[MONITOR] Error: La Central rechazo la trama o devolvio un estado no valido.\n");
+        }
+        pthread_mutex_lock(&mutex_estado_monitor);
         central_conectada = 0;
+        pthread_mutex_unlock(&mutex_estado_monitor);
         close(s);
         return -1;
     }
 
+    pthread_mutex_lock(&mutex_estado_monitor);
     central_conectada = 1;
+    pthread_mutex_unlock(&mutex_estado_monitor);
     /**** Cerrar el socket ****/
     close(s);
     return 0;
 }
 
+// Envía periódicamente el estado de la estación a Central.
 void *hilo_latido_central(void *arg)
 {
     char mensaje[128];
@@ -159,8 +168,15 @@ void *hilo_latido_central(void *arg)
     (void)arg;
     while (1)
     {
+        int fuga_actual;
+        int engine_activo;
+        pthread_mutex_lock(&mutex_estado_monitor);
+        fuga_actual = en_fuga;
+        engine_activo = engine_conectado;
+        pthread_mutex_unlock(&mutex_estado_monitor);
+
         const char *estado = "OK";
-        if (en_fuga || !engine_conectado) {
+        if (fuga_actual || !engine_activo) {
             estado = "FUGA";
         }
         snprintf(mensaje, sizeof(mensaje), "LATIDO#%s#%s\n", id_estacion, estado);
@@ -170,9 +186,8 @@ void *hilo_latido_central(void *arg)
     return NULL;
 }
 
-/* =========================================================================
- * HILO SERVIDOR LOCAL PARA COMPROBAR LA SALUD DE WM_WS_E CADA SEGUNDO
- * ========================================================================= */
+
+// Acepta al Engine, comprueba su estado y avisa a Central.
 void *hilo_servidor_engine(void *arg)
 {
     struct sockaddr_in direccion_local, direccion_cliente;
@@ -222,32 +237,44 @@ void *hilo_servidor_engine(void *arg)
         }
 
         printf("[MONITOR] WM_WS_E conectado. Iniciando comprobacion de estado de salud (1s)...\n");
+        pthread_mutex_lock(&mutex_estado_monitor);
         engine_conectado = 1;
+        pthread_mutex_unlock(&mutex_estado_monitor);
 
         while (1)
         {
             const char *consulta = "PING";
-            if (comando_engine == 1)
+            int comando_actual;
+            int central_actual;
+            pthread_mutex_lock(&mutex_estado_monitor);
+            comando_actual = comando_engine;
+            comando_engine = 0;
+            central_actual = central_conectada;
+            pthread_mutex_unlock(&mutex_estado_monitor);
+
+            if (comando_actual == 1)
             {
                 consulta = "DETENER_FUGA";
-                comando_engine = 0;
             }
-            else if (comando_engine == 2)
+            else if (comando_actual == 2)
             {
                 consulta = "RESTABLECER";
-                comando_engine = 0;
             }
 
             char mensaje_engine[128];
             const char *estado_central = "CENTRAL_KO";
-            if (central_conectada) estado_central = "CENTRAL_OK";
+            if (central_actual) {
+                estado_central = "CENTRAL_OK";
+            }
             snprintf(mensaje_engine, sizeof(mensaje_engine), "%s#%s\n", consulta, estado_central);
             enviados = write(s_engine_cliente, mensaje_engine, strlen(mensaje_engine));
             if (enviados <= 0)
             {
                 fprintf(stderr, "[MONITOR] Error al enviar comprobacion a WM_WS_E (desconexion). Notificando AVERIA...\n");
+                pthread_mutex_lock(&mutex_estado_monitor);
                 engine_conectado = 0;
                 en_fuga = 1;
+                pthread_mutex_unlock(&mutex_estado_monitor);
                 snprintf(mensaje_central, sizeof(mensaje_central), "AVERIA#%s#ENGINE_DESCONECTADO\n", id_estacion);
                 enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central));
                 close(s_engine_cliente);
@@ -259,8 +286,10 @@ void *hilo_servidor_engine(void *arg)
             if (recibidos <= 0)
             {
                 fprintf(stderr, "[MONITOR] Sin respuesta de WM_WS_E (desconexion). Notificando AVERIA...\n");
+                pthread_mutex_lock(&mutex_estado_monitor);
                 engine_conectado = 0;
                 en_fuga = 1;
+                pthread_mutex_unlock(&mutex_estado_monitor);
                 snprintf(mensaje_central, sizeof(mensaje_central), "AVERIA#%s#ENGINE_DESCONECTADO\n", id_estacion);
                 enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central));
                 close(s_engine_cliente);
@@ -271,23 +300,29 @@ void *hilo_servidor_engine(void *arg)
             buffer[recibidos] = '\0';
             buffer[strcspn(buffer, "\r\n")] = '\0';
 
-            if ((strcmp(buffer, "KO") == 0 || strcmp(buffer, "FUGA") == 0) && !en_fuga)
+            int fuga_actual;
+            pthread_mutex_lock(&mutex_estado_monitor);
+            fuga_actual = en_fuga;
+            pthread_mutex_unlock(&mutex_estado_monitor);
+
+            if ((strcmp(buffer, "KO") == 0 || strcmp(buffer, "FUGA") == 0) && !fuga_actual)
             {
                 printf("[MONITOR] Recibido %s desde WM_WS_E. Enviando AVERIA a WM_Central...\n", buffer);
+                pthread_mutex_lock(&mutex_estado_monitor);
                 en_fuga = 1;
+                pthread_mutex_unlock(&mutex_estado_monitor);
                 snprintf(mensaje_central, sizeof(mensaje_central), "AVERIA#%s#FUGA\n", id_estacion);
-                if (enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central)) == 0)
-                {
-                    en_fuga = 1;
-                }
+                enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central));
             }
-            else if (strcmp(buffer, "OK") == 0 && en_fuga)
+            else if (strcmp(buffer, "OK") == 0 && fuga_actual)
             {
                 printf("[MONITOR] Recibido OK desde WM_WS_E. Enviando REPARADO a WM_Central...\n");
                 snprintf(mensaje_central, sizeof(mensaje_central), "REPARADO#%s\n", id_estacion);
                 if (enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central)) == 0)
                 {
+                    pthread_mutex_lock(&mutex_estado_monitor);
                     en_fuga = 0;
+                    pthread_mutex_unlock(&mutex_estado_monitor);
                 }
             }
 
@@ -297,6 +332,7 @@ void *hilo_servidor_engine(void *arg)
     return NULL;
 }
 
+// Registra el Monitor y arranca sus hilos de comunicación.
 int main(int argc, char *argv[])
 {
     char mensaje[1024];
@@ -351,7 +387,11 @@ int main(int argc, char *argv[])
     {
         printf("\n--- MENU MONITOR (%s - %s) ---\n", id_estacion, ubicacion);
         const char *estado_actual = "DISPONIBLE (OK)";
-        if (en_fuga) {
+        int fuga_actual;
+        pthread_mutex_lock(&mutex_estado_monitor);
+        fuga_actual = en_fuga;
+        pthread_mutex_unlock(&mutex_estado_monitor);
+        if (fuga_actual) {
             estado_actual = "AVERIADA (FUGA)";
         }
         printf("Estado actual: %s\n", estado_actual);
@@ -371,8 +411,10 @@ int main(int argc, char *argv[])
             snprintf(mensaje, sizeof(mensaje), "AVERIA#%s\n", id_estacion);
             if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
             {
+                pthread_mutex_lock(&mutex_estado_monitor);
                 en_fuga = 1;
                 comando_engine = 1;
+                pthread_mutex_unlock(&mutex_estado_monitor);
             }
         }
         else if (op == 2)
@@ -380,8 +422,10 @@ int main(int argc, char *argv[])
             snprintf(mensaje, sizeof(mensaje), "REPARADO#%s\n", id_estacion);
             if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
             {
+                pthread_mutex_lock(&mutex_estado_monitor);
                 en_fuga = 0;
                 comando_engine = 2;
+                pthread_mutex_unlock(&mutex_estado_monitor);
             }
         }
     }
