@@ -1,6 +1,3 @@
-// Archivo: WM_WS_M.c
-// Compilación: gcc WM_WS_M.c -o WM_WS_M -lpthread
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -28,7 +25,7 @@ int comando_engine = 0; // 0 = PING normal, 1 = DETENER_FUGA, 2 = RESTABLECER
 int central_conectada = 0;
 pthread_mutex_t mutex_estado_monitor = PTHREAD_MUTEX_INITIALIZER;
 
-// Cierra los sockets del Monitor cuando termina el proceso.
+// cierra los sockets del Monitor cuando termina el proceso
 void finalizar(int sig)
 {
     printf("\n[MONITOR] Cerrando sockets y finalizando ejecucion...\n");
@@ -41,7 +38,7 @@ void finalizar(int sig)
     exit(0);
 }
 
-// Envía un mensaje a Central y recoge su respuesta.
+// envia un mensaje a Central y recoge su respuesta
 int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta)
 {
     struct sockaddr_in direccion;
@@ -50,7 +47,7 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     int n, enviados, recibidos;
     int es_latido = strncmp(mensaje, "LATIDO#", 7) == 0;
 
-    /**** Paso 1: Abrir el socket ****/
+    // abrimos el socket
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s == -1)
     {
@@ -60,7 +57,7 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         return -1;
     }
 
-    /**** Resolver IP o Nombre de Contenedor (Docker DNS) ****/
+    // resolver IP o Nombre de Contenedor (Docker DNS)
     he = gethostbyname(servidor_ip);
     if (he == NULL)
     {
@@ -71,11 +68,12 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         return -1;
     }
 
-    /**** Conectar al servidor ****/
+    // conectar al servidor
     direccion.sin_family = AF_INET;
     direccion.sin_port = htons(atoi(servidor_puerto));
     memcpy(&direccion.sin_addr, he->h_addr_list[0], he->h_length);
 
+    // timeout de 2 s para que si Central cae el Monitor no se quede bloqueado en connect/read
     struct timeval timeout;
     timeout.tv_sec = 2;
     timeout.tv_usec = 0;
@@ -101,7 +99,7 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         return -1;
     }
 
-    /**** Enviar mensaje ****/
+    // enviar mensaje
     n = strlen(mensaje);
     enviados = write(s, mensaje, n);
     if (enviados == -1 || enviados < n)
@@ -119,7 +117,7 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         printf("[MONITOR] Trama enviada a Central: %s", mensaje);
     }
 
-    /**** Recibir respuesta ****/
+    // recibir respuesta
     n = tam_respuesta - 1;
     recibidos = read(s, respuesta, n);
 
@@ -139,7 +137,7 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
         printf("[MONITOR] Respuesta de WM_Central: %s\n", respuesta);
     }
 
-    /**** Validar que la respuesta comience por STATUS#OK ****/
+    // validar que la respuesta comience por STATUS#OK
     if (strncmp(respuesta, "STATUS#OK", 9) != 0)
     {
         if (!es_latido) {
@@ -153,14 +151,15 @@ int enviar_trama_central(const char *mensaje, char *respuesta, int tam_respuesta
     }
 
     pthread_mutex_lock(&mutex_estado_monitor);
+    // Central contestó OK: la marco conectada, el Engine lo sabe por el CENTRAL_OK/KO de cada ping
     central_conectada = 1;
     pthread_mutex_unlock(&mutex_estado_monitor);
-    /**** Cerrar el socket ****/
+    // cerrar el socket
     close(s);
     return 0;
 }
 
-// Envía periódicamente el estado de la estación a Central.
+// envia periódicamente el estado de la estación a Central
 void *hilo_latido_central(void *arg)
 {
     char mensaje[128];
@@ -175,6 +174,7 @@ void *hilo_latido_central(void *arg)
         engine_activo = engine_conectado;
         pthread_mutex_unlock(&mutex_estado_monitor);
 
+        // si hay fuga o el Engine no está conectado, el propio latido ya avisa de FUGA a Central
         const char *estado = "OK";
         if (fuga_actual || !engine_activo) {
             estado = "FUGA";
@@ -187,7 +187,7 @@ void *hilo_latido_central(void *arg)
 }
 
 
-// Acepta al Engine, comprueba su estado y avisa a Central.
+// acepta al Engine, comprueba su estado y avisa a Central
 void *hilo_servidor_engine(void *arg)
 {
     struct sockaddr_in direccion_local, direccion_cliente;
@@ -229,6 +229,7 @@ void *hilo_servidor_engine(void *arg)
 
     while (1)
     {
+        // el Monitor hace de servidor: el Engine se conecta aquí y cada segundo le mando un ping
         tam_direccion = sizeof(direccion_cliente);
         s_engine_cliente = accept(s_local_servidor, (struct sockaddr *)&direccion_cliente, &tam_direccion);
         if (s_engine_cliente == -1)
@@ -243,6 +244,7 @@ void *hilo_servidor_engine(void *arg)
 
         while (1)
         {
+            // ping normal por defecto; si hay un comando pendiente (avería/reparado manual) se lo mando en su lugar
             const char *consulta = "PING";
             int comando_actual;
             int central_actual;
@@ -283,6 +285,7 @@ void *hilo_servidor_engine(void *arg)
             }
 
             recibidos = read(s_engine_cliente, buffer, sizeof(buffer) - 1);
+            // si el Engine no responde o cierra la conexión lo doy por averiado y aviso a Central
             if (recibidos <= 0)
             {
                 fprintf(stderr, "[MONITOR] Sin respuesta de WM_WS_E (desconexion). Notificando AVERIA...\n");
@@ -305,6 +308,7 @@ void *hilo_servidor_engine(void *arg)
             fuga_actual = en_fuga;
             pthread_mutex_unlock(&mutex_estado_monitor);
 
+            // solo aviso en el cambio a fuga (!fuga_actual), no en cada ping, para no repetir la avería en Central
             if ((strcmp(buffer, "KO") == 0 || strcmp(buffer, "FUGA") == 0) && !fuga_actual)
             {
                 printf("[MONITOR] Recibido %s desde WM_WS_E. Enviando AVERIA a WM_Central...\n", buffer);
@@ -316,6 +320,7 @@ void *hilo_servidor_engine(void *arg)
             }
             else if (strcmp(buffer, "OK") == 0 && fuga_actual)
             {
+                // el Engine vuelve a OK: aviso REPARADO y solo limpio en_fuga si Central lo confirma
                 printf("[MONITOR] Recibido OK desde WM_WS_E. Enviando REPARADO a WM_Central...\n");
                 snprintf(mensaje_central, sizeof(mensaje_central), "REPARADO#%s\n", id_estacion);
                 if (enviar_trama_central(mensaje_central, respuesta_central, sizeof(respuesta_central)) == 0)
@@ -332,7 +337,7 @@ void *hilo_servidor_engine(void *arg)
     return NULL;
 }
 
-// Registra el Monitor y arranca sus hilos de comunicación.
+// registra el Monitor y arranca sus hilos de comunicación
 int main(int argc, char *argv[])
 {
     char mensaje[1024];
@@ -359,6 +364,7 @@ int main(int argc, char *argv[])
     snprintf(mensaje, sizeof(mensaje), "REGISTRO#%s#%s\n", id_estacion, ubicacion);
     printf("Intentando registrar [%s - %s] en %s:%s...\n", id_estacion, ubicacion, servidor_ip, servidor_puerto);
 
+    // Central puede tardar en arrancar, por eso reintento el registro hasta 10 veces cada 2 s
     while (intentos < 10)
     {
         if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
@@ -379,6 +385,7 @@ int main(int argc, char *argv[])
 
     pthread_t th_engine;
     pthread_t th_latido;
+    // un hilo para los latidos a Central y otro para atender al Engine; el menú queda en el hilo principal
     pthread_create(&th_latido, NULL, hilo_latido_central, NULL);
     pthread_create(&th_engine, NULL, hilo_servidor_engine, NULL);
 

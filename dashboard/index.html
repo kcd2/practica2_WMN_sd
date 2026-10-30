@@ -139,16 +139,16 @@
       DESCONECTADA: 'Desconectada'
     };
 
-    // Escapa caracteres especiales antes de mostrarlos como texto.
+    // escapa caracteres especiales antes de mostrarlos como texto.
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g,
-        // Cambia cada carácter especial por su entidad HTML equivalente.
+        // cambia cada carácter especial por su entidad HTML equivalente.
         character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[character]));
     }
 
-    // Convierte el estado recibido al formato de la interfaz.
+    // convierte el estado recibido al formato de la interfaz.
     function normalizeStatus(value) {
       const status = String(value ?? 'DESCONECTADA').trim().toUpperCase().replace(/[\s-]+/g, '_');
       if (Object.hasOwn(statusLabels, status)) {
@@ -157,7 +157,7 @@
       return 'DESCONECTADA';
     }
 
-    // Da formato a una lectura numérica para mostrarla en pantalla.
+    // da formato a una lectura numérica para mostrarla en pantalla.
     function formatNumber(value) {
       if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
         return '—';
@@ -177,7 +177,7 @@
       document.getElementById('apiStatusText').textContent = statusText;
     }
 
-    // Construye las filas de la tabla con las estaciones recibidas.
+    // construye las filas de la tabla con las estaciones recibidas
     function renderStations(stations) {
       const body = document.getElementById('stationsBody');
       document.getElementById('stationCount').textContent = stations.length;
@@ -187,7 +187,7 @@
       }
 
       body.innerHTML = stations.map(station => {
-        // Prepara una fila con el estado y las lecturas de esta estación.
+        // prepara una fila con el estado y las lecturas de esta estación.
         const status = normalizeStatus(station.estado ?? station.status);
         const watering = status === 'REGANDO';
         let flow = '<span class="muted-value">—</span>';
@@ -217,7 +217,7 @@
       }).join('');
     }
 
-    // Consulta la API y refresca los datos del panel.
+    // consulta la API y refresca los datos del panel.
     async function actualizarPanel() {
       try {
         const response = await fetch('/api/status', { headers: { Accept: 'application/json' }, cache: 'no-store' });

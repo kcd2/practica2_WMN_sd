@@ -1,6 +1,3 @@
-// Archivo: WM_FO.c
-// Compilación: gcc -o WM_FO WM_FO.c -lrdkafka
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,13 +13,14 @@
 int linea_checkpoint_actual = -1;
 int error_entrega_fo = 0;
 
-/* Guarda el punto de reanudación del operario antes de enviar o esperar una petición. */
+// guarda el punto de reanudación del operario antes de enviar o esperar una petición
 int guardar_checkpoint(const char *id_estacion, int linea, const char *estado) {
     mkdir("fo_data", 0777);
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
     if (file == NULL) {
         return -1;
     }
+    // checkpoint en disco: estación, línea del fichero y estado (READY antes de enviar, WAITING ya enviada)
     int escrito = fprintf(file, "%s\n%d\n%s\n", id_estacion, linea, estado) > 0;
     if (escrito && fflush(file) != 0) {
         escrito = 0;
@@ -36,7 +34,7 @@ int guardar_checkpoint(const char *id_estacion, int linea, const char *estado) {
     return -1;
 }
 
-// Lee la operación guardada para poder reanudarla.
+// lee la operación guardada para poder reanudarla
 int leer_checkpoint(char *id_estacion, size_t tam, int *linea, char *estado, size_t tam_estado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
     if (file == NULL) {
@@ -65,12 +63,12 @@ int leer_checkpoint(char *id_estacion, size_t tam, int *linea, char *estado, siz
     return leido;
 }
 
-// Borra el checkpoint cuando ya no queda una operación pendiente.
+// borra el checkpoint cuando ya no queda una operación pendiente
 void limpiar_checkpoint(void) {
     remove("fo_data/operacion_pendiente.txt");
 }
 
-// Lee el último resultado guardado del operario.
+// lee el último resultado guardado del operario
 int leer_checkpoint_completado(char *topic, size_t tam_topic, int *particion, long long *offset, char *resultado, size_t tam_resultado) {
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "r");
     if (file == NULL) {
@@ -100,7 +98,7 @@ int leer_checkpoint_completado(char *topic, size_t tam_topic, int *particion, lo
     return completado;
 }
 
-// Confirma a Kafka los mensajes ya guardados en el checkpoint.
+// confirma a Kafka los mensajes ya guardados en el checkpoint
 int confirmar_offset_guardado(rd_kafka_t *rk_consumer, const char *topic, int particion, long long offset) {
     rd_kafka_topic_partition_list_t *offsets = rd_kafka_topic_partition_list_new(1);
     if (offsets == NULL) {
@@ -120,7 +118,7 @@ int confirmar_offset_guardado(rd_kafka_t *rk_consumer, const char *topic, int pa
     return -1;
 }
 
-// Guarda el resultado recibido y su posición en Kafka.
+// guarda el resultado recibido y su posición en Kafka
 int guardar_resultado_checkpoint(const char *id_estacion, int linea, rd_kafka_message_t *mensaje, const char *resultado) {
     const char *topic = rd_kafka_topic_name(mensaje->rkt);
     FILE *file = fopen("fo_data/operacion_pendiente.txt", "w");
@@ -145,7 +143,7 @@ int guardar_resultado_checkpoint(const char *id_estacion, int linea, rd_kafka_me
     return -1;
 }
 
-// Confirma a Kafka que el mensaje ya se procesó.
+// confirma a Kafka que el mensaje ya se procesó
 int confirmar_mensaje(rd_kafka_t *rk_consumer, rd_kafka_message_t *mensaje) {
     rd_kafka_resp_err_t error = rd_kafka_commit_message(rk_consumer, mensaje, 0);
     if (error != RD_KAFKA_RESP_ERR_NO_ERROR) {
@@ -155,7 +153,7 @@ int confirmar_mensaje(rd_kafka_t *rk_consumer, rd_kafka_message_t *mensaje) {
     return 0;
 }
 
-// Anota si Kafka confirmó la entrega del mensaje del operario.
+// anota si Kafka confirmó la entrega del mensaje del operario
 void confirmar_entrega_fo(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, void *opaque) {
     (void)rk;
     (void)opaque;
@@ -164,10 +162,11 @@ void confirmar_entrega_fo(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, voi
     }
 }
 
-// Publica un mensaje en Kafka y reintenta si falla el envío.
+// publica un mensaje en Kafka y reintenta si falla el envío
 int publicar_mensaje(rd_kafka_t *rk_producer, rd_kafka_topic_t *topic, const char *payload) {
     int intentos = 0;
     int en_cola = 0;
+    // hasta 5 intentos: el flush espera la confirmación y el callback avisa si Kafka rechazó el mensaje
     while (intentos < 5) {
         if (!en_cola) {
             error_entrega_fo = 0;
@@ -194,8 +193,9 @@ int publicar_mensaje(rd_kafka_t *rk_producer, rd_kafka_topic_t *topic, const cha
     return -1;
 }
 
-// Guarda el resultado y confirma el mensaje recibido.
+// guarda el resultado y confirma el mensaje recibido
 int completar_operacion(rd_kafka_t *rk_consumer, const char *id_estacion, rd_kafka_message_t *mensaje, const char *resultado) {
+    // primero guardo el resultado en disco y luego confirmo el offset: si me caigo entre medias lo recupero al volver
     if (guardar_resultado_checkpoint(id_estacion, linea_checkpoint_actual, mensaje, resultado) != 0) {
         fprintf(stderr, "[FO] No se pudo guardar el resultado; el offset queda pendiente.\n");
         return 0;
@@ -206,17 +206,19 @@ int completar_operacion(rd_kafka_t *rk_consumer, const char *id_estacion, rd_kaf
     return 1;
 }
 
-// Bloquea hasta recibir respuesta de Central; si es AUTORIZADO, espera también a FIN_RIEGO
+// bloquea hasta recibir respuesta de Central; si es AUTORIZADO, espera también a FIN_RIEGO
 int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, const char *id_estacion_esperada) {
     printf("Esperando confirmacion de la Central para %s...\n", id_estacion_esperada);
     int riego_en_curso = 0;
     time_t inicio_espera = time(NULL);
 
     while (1) {
-        if (time(NULL) - inicio_espera >= 45) {
-            printf(">>> [AVISO] La operación en %s sigue pendiente. Se conserva y continúa la espera de WM_Central.\n\n", id_estacion_esperada);
-            inicio_espera = time(NULL);
+        // si en 15 s Central no contesta aviso del error y dejo la petición pendiente
+        if (time(NULL) - inicio_espera >= 15) {
+            fprintf(stderr, ">>> [ERROR] Imposible conectar con WM_Central o la Central está fuera de servicio.\n");
+            return 0; 
         }
+
         rd_kafka_message_t *rkmessage = rd_kafka_consumer_poll(rk_consumer, 1000);
 
         if (rkmessage) {
@@ -248,6 +250,7 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                                id_est, caudal, volumen);
                         riego_en_curso = 1;
                     }
+                    // el FIN_RIEGO cierra la operación: lo guardo en el checkpoint y paso a la siguiente petición
                     if (strncmp(resultado, "FIN_RIEGO", 9) == 0 &&
                         (strcmp(id_op, id_operador_actual) == 0 || strcmp(id_op, "TODOS") == 0)) {
                         printf(">>> [SERVICIO FINALIZADO en %s] Resumen: %s\n\n", id_est, resultado);
@@ -255,11 +258,11 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                         rd_kafka_message_destroy(rkmessage);
                         return confirmado;
                     }
-                    // 1. Respuesta directa a la solicitud de este operario
+                    // respuesta directa a la solicitud de este operario
                     if (!riego_en_curso && strcmp(id_op, id_operador_actual) == 0) {
                         if (strcmp(resultado, "AUTORIZADO") == 0) {
                             printf(">>> [EXITO] Riego AUTORIZADO en la estacion %s. Luz VERDE. Esperando fin del servicio...\n", id_est);
-                            riego_en_curso = 1; // Nos quedamos en el bucle hasta que llegue FIN_RIEGO
+                            riego_en_curso = 1; // nos quedamos en el bucle hasta que llegue FIN_RIEGO
                         } else if (strcmp(resultado, "DENEGADO") == 0) {
                             printf(">>> [DENEGADO] La estacion %s esta ocupada, bloqueada o con averia.\n\n", id_est);
                             int confirmado = completar_operacion(rk_consumer, id_estacion_esperada, rkmessage, payload_original);
@@ -293,7 +296,7 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                             return confirmado;
                         }
                     }
-                    // 2. Resumen de finalización del riego activo
+                    // resumen de finalización del riego activo
                     else if (riego_en_curso && (strcmp(id_op, id_operador_actual) == 0 || strcmp(id_op, "TODOS") == 0) &&
                              strcmp(resultado, "ERROR_AVERIA") == 0) {
                         const char *causa = detalle;
@@ -389,10 +392,10 @@ void solicitar_estaciones_disponibles(rd_kafka_t *rk_producer, rd_kafka_topic_t 
     printf("\n");
 }
 
-// Inicia la aplicación del operario y atiende sus solicitudes.
+// inicia la aplicación del operario y atiende sus solicitudes.
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
-    sleep(20); // Espera a que Central (10s) y Monitor hayan registrado las estaciones
+    sleep(20); // espera a que Central (10s) y Monitor hayan registrado las estaciones
 
     if (argc < 3) {
         fprintf(stderr, "Uso: %s <IP_KAFKA:PUERTO> <ID_OPERADOR> [FICHERO_RUTINAS]\n", argv[0]);
@@ -412,6 +415,7 @@ int main(int argc, char *argv[]) {
 
     rd_kafka_conf_t *conf_prod = rd_kafka_conf_new();
     rd_kafka_conf_set(conf_prod, "bootstrap.servers", brokers, errstr, sizeof(errstr));
+    // acks=all e idempotencia para que una petición no se duplique ni se pierda al reintentar
     rd_kafka_conf_set(conf_prod, "acks", "all", errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_prod, "enable.idempotence", "true", errstr, sizeof(errstr));
     rd_kafka_conf_set_dr_msg_cb(conf_prod, confirmar_entrega_fo);
@@ -431,6 +435,7 @@ int main(int argc, char *argv[]) {
     rd_kafka_conf_set(conf_cons, "bootstrap.servers", brokers, errstr, sizeof(errstr));
 
     char group_id[64];
+    // un grupo por operario: así cada FO recibe todas las respuestas y se queda con las suyas por su ID
     snprintf(group_id, sizeof(group_id), "grupo_fo_%s", id_operador);
     rd_kafka_conf_set(conf_cons, "group.id", group_id, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_cons, "auto.offset.reset", "latest", errstr, sizeof(errstr));
@@ -453,6 +458,7 @@ int main(int argc, char *argv[]) {
     char estacion_pendiente[128];
     int linea_pendiente = -1;
     char estado_checkpoint[32] = "";
+    // al arrancar miro si quedó una operación a medias (el FO se cerró durante un riego) para retomarla
     int hay_checkpoint = leer_checkpoint(estacion_pendiente, sizeof(estacion_pendiente), &linea_pendiente,
                                          estado_checkpoint, sizeof(estado_checkpoint));
     char topic_completado[128];
@@ -478,6 +484,7 @@ int main(int argc, char *argv[]) {
         limpiar_checkpoint();
     } else if (hay_checkpoint) {
         linea_checkpoint_actual = linea_pendiente;
+        // READY = me caí antes de enviar la petición, así que la reenvío; WAITING = ya enviada, solo espero respuesta
         if (strcmp(estado_checkpoint, "READY") == 0) {
             char solicitud_pendiente[256];
             snprintf(solicitud_pendiente, sizeof(solicitud_pendiente), "%s#%s", id_operador, estacion_pendiente);
@@ -524,6 +531,7 @@ int main(int argc, char *argv[]) {
         int continuar = 1;
         while (fgets(id_estacion, sizeof(id_estacion), file)) {
             numero_linea++;
+            // salto las líneas que ya se hicieron antes de la caída
             if (numero_linea <= linea_pendiente) {
                 continue;
             }
@@ -557,6 +565,7 @@ int main(int argc, char *argv[]) {
             }
             limpiar_checkpoint();
 
+            // 4 s entre servicios, como pide el enunciado
             printf("[FO] Esperando 4 segundos antes de la siguiente peticion...\n\n");
             sleep(4);
         }

@@ -1,6 +1,3 @@
-// Archivo: WM_Central.c
-// Compilación: gcc -o WM_Central WM_Central.c -lsqlite3 -lrdkafka -lpthread
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -18,9 +15,9 @@
 
 int s = -1;      // socket servidor TCP (estaciones)
 int s_http = -1; // socket servidor HTTP (panel web)
-int error_entrega_kafka = 0;
+int error_entrega_kafka = 0; // el callback lo pone a 1 si Kafka no confirma la entrega
 
-// Cierra los sockets abiertos cuando termina Central.
+// cierra los sockets abiertos cuando termina Central
 void finalizar(int senyal) {
     printf("\nApagando servidor WM_Central...\n");
     if (s != -1) {
@@ -32,7 +29,7 @@ void finalizar(int senyal) {
     exit(0);
 }
 
-// Guarda una línea con la última petición o evento para mostrarla en el panel web
+// guarda una línea con la última petición o evento para mostrarla en el panel web
 void guardar_ultima_peticion(const char *texto) {
     FILE *f = fopen("db_data/ultima_peticion.txt", "w");
     if (f) {
@@ -41,12 +38,12 @@ void guardar_ultima_peticion(const char *texto) {
     }
 }
 
-// Lee del fichero el último evento guardado para el panel.
+// lee del fichero el último evento guardado para el panel
 void leer_ultima_peticion(char *buffer, size_t tam) {
     FILE *f = fopen("db_data/ultima_peticion.txt", "r");
     if (f) {
         if (fgets(buffer, (int)tam, f) != NULL) {
-            buffer[strcspn(buffer, "\r\n\"\\")] = '\0';
+            buffer[strcspn(buffer, "\r\n\"\\")] = '\0'; // limpia retornos de carro, saltos de línea y caracteres especiales del bufer
             fclose(f);
             return;
         }
@@ -55,7 +52,7 @@ void leer_ultima_peticion(char *buffer, size_t tam) {
     snprintf(buffer, tam, "Ninguna petición registrada todavía");
 }
 
-// Añade una columna si todavía no existe en la tabla.
+// añade una columna si todavía no existe en la tabla
 int asegurar_columna(sqlite3 *db, const char *tabla, const char *columna, const char *tipo) {
     char sql[256];
     char *err_msg = NULL;
@@ -93,7 +90,7 @@ int asegurar_columna(sqlite3 *db, const char *tabla, const char *columna, const 
     return 0;
 }
 
-// Carga las estaciones iniciales desde el fichero de configuración.
+// carga las estaciones iniciales desde el fichero de configuración
 int cargar_estaciones_config(sqlite3 *db) {
     FILE *file = fopen("config/estaciones.txt", "r");
     if (file == NULL) {
@@ -131,7 +128,7 @@ int cargar_estaciones_config(sqlite3 *db) {
     return 0;
 }
 
-// Carga los operarios iniciales desde el fichero de configuración.
+// carga los operarios iniciales desde el fichero de configuración
 int cargar_operarios_config(sqlite3 *db) {
     FILE *file = fopen("config/operarios.txt", "r");
     if (file == NULL) {
@@ -169,8 +166,8 @@ int cargar_operarios_config(sqlite3 *db) {
     return 0;
 }
 
-// Guarda en SQLite un mensaje que aún debe enviarse a Kafka.
-int guardar_mensaje_pendiente(sqlite3 *db, const char *topic, const char *payload) {
+// guarda en SQLite un mensaje que aún debe enviarse a Kafka
+int guardar_mensaje_pendiente(sqlite3 *db, const char *topic, const char *payload) { // outbox: no publico directo en Kafka, lo guardo en SQLite y otro hilo lo envía; así no se pierde nada si Kafka cae
     sqlite3_stmt *stmt = NULL;
     const char *sql = "INSERT INTO kafka_outbox (topic, payload, creado) VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER));";
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -186,7 +183,7 @@ int guardar_mensaje_pendiente(sqlite3 *db, const char *topic, const char *payloa
     return 0;
 }
 
-// Actualiza el cierre del riego y prepara el resumen para el operario.
+// actualiza el cierre del riego y prepara el resumen para el operario
 int finalizar_riego_central(const char *id_estacion, const char *volumen, const char *duracion, const char *causa) {
     sqlite3 *db = NULL;
     sqlite3_stmt *stmt = NULL;
@@ -212,7 +209,7 @@ int finalizar_riego_central(const char *id_estacion, const char *volumen, const 
         return -1;
     }
     sqlite3_busy_timeout(db, 3000);
-    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) {
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) != SQLITE_OK) { // transacción: el cambio de estado y los mensajes al FO se guardan juntos o no se guarda nada
         sqlite3_close(db);
         return -1;
     }
@@ -257,7 +254,7 @@ int finalizar_riego_central(const char *id_estacion, const char *volumen, const 
         }
     }
     sqlite3_finalize(stmt);
-    if (resultado == 0 && id_operario[0] != '\0' && strcmp(id_operario, "CENTRAL") != 0 && strcmp(id_operario, "MANUAL_WS") != 0) {
+    if (resultado == 0 && id_operario[0] != '\0' && strcmp(id_operario, "CENTRAL") != 0 && strcmp(id_operario, "MANUAL_WS") != 0) { // a CENTRAL y MANUAL_WS no se les avisa porque no hay ningún FO esperando
         if ((strcmp(causa_texto, "FUGA") == 0 || strcmp(causa_texto, "ENGINE_DESCONECTADO") == 0) &&
             strcmp(estado_anterior, "FUGA") != 0) {
             char error[512];
@@ -287,7 +284,7 @@ int finalizar_riego_central(const char *id_estacion, const char *volumen, const 
     return resultado;
 }
 
-// Registra la avería de una estación y prepara el aviso correspondiente.
+// registra la avería de una estación y prepara el aviso correspondiente
 int registrar_averia_central(sqlite3 *db, const char *id_estacion, const char *causa) {
     sqlite3_stmt *stmt = NULL;
     char estado_actual[64] = "";
@@ -357,7 +354,7 @@ error_averia:
     return -1;
 }
 
-// Actualiza la estación reparada y prepara el resumen pendiente.
+// actualiza la estación reparada y prepara el resumen pendiente
 int registrar_reparacion_central(sqlite3 *db, const char *id_estacion) {
     sqlite3_stmt *stmt = NULL;
     char operario_actual[128] = "";
@@ -430,7 +427,7 @@ error_reparacion:
     return -1;
 }
 
-// Anota si Kafka confirmó la entrega del mensaje.
+// anota si Kafka confirmó la entrega del mensaje
 void confirmar_entrega_kafka(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, void *opaque) {
     (void)rk;
     (void)opaque;
@@ -439,12 +436,12 @@ void confirmar_entrega_kafka(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, 
     }
 }
 
-// Reintenta publicar en Kafka los mensajes guardados en SQLite.
+// reintenta publicar en Kafka los mensajes guardados en SQLite
 void *hilo_publicador_pendientes(void *arg) {
     char *brokers = (char *)arg;
     char errstr[512];
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
-    if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+    if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK || // acks=all e idempotencia: Kafka confirma antes de dar por bueno y no duplica si reintento
         rd_kafka_conf_set(conf, "acks", "all", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
         rd_kafka_conf_set(conf, "enable.idempotence", "true", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
         fprintf(stderr, "[KAFKA] No se pudo configurar el publicador de salida: %s\n", errstr);
@@ -489,7 +486,7 @@ void *hilo_publicador_pendientes(void *arg) {
             continue;
         }
         error_entrega_kafka = 0;
-        int producido = rd_kafka_produce(topic, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+        int producido = rd_kafka_produce(topic, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY, // produce + flush: solo marco entregado=1 si Kafka confirma; si falla, se reintenta al segundo
                                          payload, strlen(payload), NULL, 0, NULL);
         int vaciado = RD_KAFKA_RESP_ERR__FAIL;
         if (producido == 0) {
@@ -516,7 +513,7 @@ void *hilo_publicador_pendientes(void *arg) {
     return NULL;
 }
 
-// Marca como desconectadas las estaciones que dejaron de enviar latidos.
+// marca como desconectadas las estaciones que dejaron de enviar latidos
 void *hilo_vigilancia_monitores(void *arg) {
     (void)arg;
     while (1) {
@@ -524,7 +521,7 @@ void *hilo_vigilancia_monitores(void *arg) {
         sqlite3 *db = NULL;
         if (sqlite3_open("db_data/water_management.db", &db) == SQLITE_OK) {
             sqlite3_busy_timeout(db, 2000);
-            const char *sql = "UPDATE estaciones SET estado_pre_desconexion = CASE WHEN estado = 'DESCONECTADA' THEN estado_pre_desconexion ELSE estado END, estado = 'DESCONECTADA', caudal = 0.0 WHERE estado != 'DESCONECTADA' AND (ultimo_latido IS NULL OR CAST(strftime('%s','now') AS INTEGER) - ultimo_latido >= 5);";
+            const char *sql = "UPDATE estaciones SET estado_pre_desconexion = CASE WHEN estado = 'DESCONECTADA' THEN estado_pre_desconexion ELSE estado END, estado = 'DESCONECTADA', caudal = 0.0 WHERE estado != 'DESCONECTADA' AND (ultimo_latido IS NULL OR CAST(strftime('%s','now') AS INTEGER) - ultimo_latido >= 5);"; // 5 s sin latido del Monitor => DESCONECTADA (guardo el estado anterior para restaurarlo)
             if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) {
                 fprintf(stderr, "[CENTRAL] No se pudieron actualizar los estados por vencimiento de latido.\n");
             }
@@ -534,7 +531,7 @@ void *hilo_vigilancia_monitores(void *arg) {
     return NULL;
 }
 
-// Procesa las peticiones y los eventos recibidos desde Kafka.
+// procesa las peticiones y los eventos recibidos desde Kafka
 void *hilo_consumidor_kafka(void *arg) {
     char *ip_kafka = (char *)arg;
     char errstr[512];
@@ -543,7 +540,7 @@ void *hilo_consumidor_kafka(void *arg) {
     rd_kafka_conf_t *conf_cons = rd_kafka_conf_new();
     rd_kafka_conf_set(conf_cons, "bootstrap.servers", ip_kafka, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_cons, "group.id", "grupo_central", errstr, sizeof(errstr));
-    rd_kafka_conf_set(conf_cons, "enable.auto.commit", "false", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf_cons, "enable.auto.commit", "false", errstr, sizeof(errstr)); // commit manual: confirmo el offset solo cuando ya guardé el resultado en la BD, así no pierdo eventos si Central cae
     rd_kafka_conf_set(conf_cons, "auto.offset.reset", "earliest", errstr, sizeof(errstr));
 
     rd_kafka_t *rk_consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf_cons, errstr, sizeof(errstr));
@@ -572,7 +569,7 @@ void *hilo_consumidor_kafka(void *arg) {
             char *campo5 = strtok(NULL, "#");
 
             if (campo1 && campo2) {
-                // Caso A: Telemetría en tiempo real enviada por WM_WS_E (TELEMETRIA#ID_EST#CAUDAL_LPM#VOLUMEN_L)
+                // caso A: Telemetría en tiempo real enviada por WM_WS_E (TELEMETRIA#ID_EST#CAUDAL_LPM#VOLUMEN_L)
                 if (strcmp(campo1, "TELEMETRIA") == 0 && campo3 && campo4) {
                     printf("[TELEMETRIA %s] Caudal actual: %s L/min | Volumen acumulado: %s L\n",
                            campo2, campo3, campo4);
@@ -657,7 +654,7 @@ void *hilo_consumidor_kafka(void *arg) {
                         procesado_ok = 0;
                     }
                 }
-                // Caso B: Fin de riego enviado por WM_WS_E (FIN_RIEGO#ID_EST#VOLUMEN_L#DURACION_S)
+                // caso B: Fin de riego enviado por WM_WS_E (FIN_RIEGO#ID_EST#VOLUMEN_L#DURACION_S)
                 else if (strcmp(campo1, "FIN_RIEGO") == 0) {
                     if (finalizar_riego_central(campo2, campo3, campo4, campo5) != 0) {
                         fprintf(stderr, "[CENTRAL] No se pudo cerrar el riego; se conservará el evento para reintento.\n");
@@ -733,7 +730,7 @@ void *hilo_consumidor_kafka(void *arg) {
                         procesado_ok = 0;
                     }
                 }
-                // Caso C: Solicitud normal de un Operario (ID_OPERARIO#ID_ESTACION)
+                // caso C: Solicitud normal de un Operario (ID_OPERARIO#ID_ESTACION)
                 else {
                     char *id_operario = campo1;
                     char *id_estacion = campo2;
@@ -800,7 +797,7 @@ void *hilo_consumidor_kafka(void *arg) {
                                 int autorizado = sqlite3_exec(db, "BEGIN IMMEDIATE;", NULL, NULL, NULL) == SQLITE_OK;
                                 sqlite3_stmt *stmt_update = NULL;
                                 if (autorizado && sqlite3_prepare_v2(db,
-                                    "UPDATE estaciones SET estado = 'REGANDO', caudal = 0.0, volumen = 0.0, operario = ?, riego_inicio = CAST(strftime('%s','now') AS INTEGER), riego_fin = NULL WHERE id = ? AND estado = 'DISPONIBLE';",
+                                    "UPDATE estaciones SET estado = 'REGANDO', caudal = 0.0, volumen = 0.0, operario = ?, riego_inicio = CAST(strftime('%s','now') AS INTEGER), riego_fin = NULL WHERE id = ? AND estado = 'DISPONIBLE';", // el WHERE estado='DISPONIBLE' hace de cerrojo: si dos operarios piden a la vez, solo uno modifica la fila
                                     -1, &stmt_update, NULL) == SQLITE_OK) {
                                     sqlite3_bind_text(stmt_update, 1, id_operario, -1, SQLITE_TRANSIENT);
                                     sqlite3_bind_text(stmt_update, 2, id_estacion, -1, SQLITE_TRANSIENT);
@@ -810,7 +807,7 @@ void *hilo_consumidor_kafka(void *arg) {
                                 }
                                 sqlite3_finalize(stmt_update);
                                 if (autorizado) {
-                                    snprintf(mensaje_orden, sizeof(mensaje_orden), "%s#INICIAR_RIEGO#%s", id_estacion, id_operario);
+                                    snprintf(mensaje_orden, sizeof(mensaje_orden), "%s#INICIAR_RIEGO#%s", id_estacion, id_operario); // orden al Engine y respuesta al FO van en la misma transacción: salen las dos o ninguna
                                     snprintf(mensaje_fo, sizeof(mensaje_fo), "%s#%s#AUTORIZADO", id_operario, id_estacion);
                                     if (guardar_mensaje_pendiente(db, "wm_ordenes_ws", mensaje_orden) == 0 &&
                                         guardar_mensaje_pendiente(db, "wm_respuestas_fo", mensaje_fo) == 0 &&
@@ -893,7 +890,7 @@ void *hilo_consumidor_kafka(void *arg) {
     return NULL;
 }
 
-// Aplica una orden de Central a una estación o a todas.
+// aplica una orden de Central a una estación o a todas.
 int ejecutar_orden_central(sqlite3 *db, int opcion, const char *id_estacion) {
     sqlite3_stmt *stmt = NULL;
     const char *sql = NULL;
@@ -967,7 +964,7 @@ int ejecutar_orden_central(sqlite3 *db, int opcion, const char *id_estacion) {
     return cambios;
 }
 
-// Lee y ejecuta las opciones del menú de Central.
+// lee y ejecuta las opciones del menú de Central
 void *hilo_menu_central(void *arg) {
     char *ip_kafka = (char *)arg;
     char entrada[128];
@@ -1041,7 +1038,7 @@ void *hilo_menu_central(void *arg) {
     return NULL;
 }
 
-// Responde a una petición HTTP del panel web.
+// responde a una petición HTTP del panel web
 void *atender_cliente_http(void *arg) {
     int cli = *(int *)arg;
     free(arg);
@@ -1144,7 +1141,7 @@ void *atender_cliente_http(void *arg) {
     return NULL;
 }
 
-// Acepta conexiones del navegador y atiende cada petición.
+// acepta conexiones del navegador y atiende cada petición
 void *hilo_http_panel(void *arg) {
     int puerto_http = *(int *)arg;
     struct sockaddr_in dir_http, dir_cli;
@@ -1188,10 +1185,10 @@ void *hilo_http_panel(void *arg) {
     return NULL;
 }
 
-// Inicializa la base de datos, Kafka y los hilos de Central.
+// inicializa la base de datos, Kafka y los hilos de Central
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
-    sleep(10);
+    sleep(10); // pequeña espera para que Kafka esté listo antes de conectar
 
     struct sockaddr_in dir_servidor, dir_cliente;
     unsigned int long_dir_cliente;
@@ -1259,7 +1256,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     sqlite3_busy_timeout(db_init, 2000);
-    const char *sql_create = "PRAGMA journal_mode=WAL;"
+    const char *sql_create = "PRAGMA journal_mode=WAL;" // WAL permite leer mientras otro escribe; synchronous FULL asegura que un commit no se pierde
                              "PRAGMA synchronous=FULL;"
                              "CREATE TABLE IF NOT EXISTS estaciones ("
                              "id TEXT PRIMARY KEY, "
@@ -1320,7 +1317,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "No se pudo cargar config/operarios.txt.\n");
         init_ok = 0;
     }
-    if (init_ok) {
+    if (init_ok) { // al arrancar todas quedan DESCONECTADA hasta que llegue un latido 
         const char *sql_seed = "UPDATE estaciones SET estado_pre_desconexion = CASE WHEN estado = 'DESCONECTADA' THEN COALESCE(estado_pre_desconexion, 'DISPONIBLE') ELSE estado END, estado = 'DESCONECTADA', caudal = 0.0, ultimo_latido = 0;";
         if (sqlite3_exec(db_init, sql_seed, NULL, NULL, &err_init) != SQLITE_OK) {
             const char *detalle_error = err_init;
@@ -1359,7 +1356,7 @@ int main(int argc, char *argv[]) {
         s2 = accept(s, (struct sockaddr *)&dir_cliente, &long_dir_cliente);
         if (s2 == -1) { continue; }
 
-        proceso = fork();
+        proceso = fork(); // un proceso hijo por conexión: Central atiende a varios Monitores a la vez (servidor concurrente)
         if (proceso == -1) { perror("Error al crear proceso"); close(s2); continue; }
 
         if (proceso == 0) {
@@ -1379,7 +1376,7 @@ int main(int argc, char *argv[]) {
                 ubicacion = strtok(NULL, "#");
 
                 if (tipo_mensaje != NULL && id_estacion != NULL) {
-                    if (strcmp(tipo_mensaje, "REGISTRO") == 0 && ubicacion != NULL) {
+                    if (strcmp(tipo_mensaje, "REGISTRO") == 0 && ubicacion != NULL) { // solo se acepta si el ID está en estaciones.txt; si no, responde STATUS#ERROR (WS no autorizada)
                         sqlite3 *db;
 
                         if (sqlite3_open("db_data/water_management.db", &db) == SQLITE_OK) {
@@ -1429,7 +1426,7 @@ int main(int argc, char *argv[]) {
                             snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Sin conexion a la BD\n");
                         }
                     }
-                    else if (strcmp(tipo_mensaje, "LATIDO") == 0) {
+                    else if (strcmp(tipo_mensaje, "LATIDO") == 0) { // cada latido actualiza ultimo_latido y saca a la estación de DESCONECTADA
                         sqlite3 *db = NULL;
                         if (sqlite3_open("db_data/water_management.db", &db) == SQLITE_OK) {
                             sqlite3_busy_timeout(db, 2000);
@@ -1463,7 +1460,7 @@ int main(int argc, char *argv[]) {
                             snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Sin conexion a la BD\n");
                         }
                     }
-                    else if (strcmp(tipo_mensaje, "AVERIA") == 0) {
+                    else if (strcmp(tipo_mensaje, "AVERIA") == 0) { // el Monitor avisa de fuga o de Engine caído; la estación pasa a FUGA y se avisa al FO si estaba regando
                         sqlite3 *db = NULL;
                         if (sqlite3_open("db_data/water_management.db", &db) == SQLITE_OK) {
                             sqlite3_busy_timeout(db, 2000);
@@ -1510,7 +1507,7 @@ int main(int argc, char *argv[]) {
                     snprintf(respuesta, sizeof(respuesta), "STATUS#ERROR#Formato de trama incorrecto\n");
                 }
 
-                size_t enviados_respuesta = 0;
+                size_t enviados_respuesta = 0; // bucle por si write no envía la respuesta completa de una vez
                 size_t longitud_respuesta = strlen(respuesta);
                 while (enviados_respuesta < longitud_respuesta) {
                     ssize_t enviados = write(s2, respuesta + enviados_respuesta,

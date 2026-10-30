@@ -1,6 +1,3 @@
-// Archivo: WM_WS_E.c
-// Compilación: gcc WM_WS_E.c -o WM_WS_E -lpthread -lrdkafka
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -18,14 +15,14 @@
 char *kafka_broker;
 char *monitor_ip;
 char *monitor_puerto;
-char *id_estacion;
+char *id_estacion; 
 
 int s_monitor = -1;
 int monitor_conectado = 0;
 int central_disponible = 0;
 int central_estado_recibido = 0;
 int estado_fuga = 0;   // 0 = OK, 1 = FUGA (KO)
-int abortar_riego = 0; // 1 = Parada ordenada por Central o manual (sin ser fuga)
+int abortar_riego = 0; // 1 = parada ordenada por Central o manual (sin ser fuga)
 int regando = 0;
 int fuera_servicio = 0;
 int error_entrega_engine = 0;
@@ -36,7 +33,7 @@ char ruta_estado_engine[256];
 pthread_mutex_t mutex_outbox_engine = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_estado_engine = PTHREAD_MUTEX_INITIALIZER;
 
-// Guarda el estado del riego para poder recuperarlo después.
+// guarda el estado del riego para poder recuperarlo después
 int guardar_estado_riego(const char *estado, double volumen, int segundos) {
     char temporal[320];
     snprintf(temporal, sizeof(temporal), "%s.tmp", ruta_estado_engine);
@@ -52,15 +49,15 @@ int guardar_estado_riego(const char *estado, double volumen, int segundos) {
     if (fclose(file) != 0) {
         escrito = 0;
     }
-    if (!escrito || rename(temporal, ruta_estado_engine) != 0) {
+    if (!escrito || rename(temporal, ruta_estado_engine) != 0) { // escribo en un .tmp y hago rename: es atómico, si me caigo a mitad el diario no queda a medias
         remove(temporal);
         return -1;
     }
     return 0;
 }
 
-// Añade un mensaje pendiente al fichero local del Engine.
-int guardar_evento_engine(const char *payload) {
+// añade un mensaje pendiente al fichero local del Engine
+int guardar_evento_engine(const char *payload) { // cola local en fichero (outbox del Engine): primero guardo, luego otro hilo publica en Kafka; si Kafka cae no pierdo telemetría ni el fin de riego
     FILE *file = fopen(ruta_outbox_engine, "a");
     if (file == NULL) {
         return -1;
@@ -78,7 +75,7 @@ int guardar_evento_engine(const char *payload) {
     return -1;
 }
 
-// Lee el siguiente mensaje pendiente del fichero del Engine.
+// lee el siguiente mensaje pendiente del fichero del Engine
 int leer_evento_engine(char *payload, size_t tam) {
     FILE *file = fopen(ruta_outbox_engine, "r");
     if (file == NULL) {
@@ -92,7 +89,7 @@ int leer_evento_engine(char *payload, size_t tam) {
     return leido && payload[0] != '\0';
 }
 
-// Elimina del fichero el mensaje que ya se entregó.
+// elimina del fichero el mensaje que ya se entregó
 int quitar_evento_engine(void) {
     char temporal[320];
     char linea[512];
@@ -133,7 +130,7 @@ int quitar_evento_engine(void) {
     return resultado;
 }
 
-// Anota si Kafka confirmó la entrega del mensaje.
+// anota si Kafka confirmó la entrega del mensaje
 void confirmar_entrega_engine(rd_kafka_t *rk, const rd_kafka_message_t *mensaje, void *opaque) {
     (void)rk;
     (void)opaque;
@@ -142,13 +139,13 @@ void confirmar_entrega_engine(rd_kafka_t *rk, const rd_kafka_message_t *mensaje,
     }
 }
 
-// Reintenta enviar a Kafka los mensajes pendientes del Engine.
+// reintenta enviar a Kafka los mensajes pendientes del Engine
 void *hilo_publicador_engine(void *arg) {
     (void)arg;
     char errstr[512];
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
     rd_kafka_conf_set(conf, "bootstrap.servers", kafka_broker, errstr, sizeof(errstr));
-    rd_kafka_conf_set(conf, "acks", "all", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf, "acks", "all", errstr, sizeof(errstr)); // acks=all e idempotencia: Kafka confirma antes de dar por entregado y no duplica en reintentos
     rd_kafka_conf_set(conf, "enable.idempotence", "true", errstr, sizeof(errstr));
     rd_kafka_conf_set_dr_msg_cb(conf, confirmar_entrega_engine);
     rd_kafka_t *producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -181,7 +178,7 @@ void *hilo_publicador_engine(void *arg) {
         }
         if (producido == 0 && vaciado == RD_KAFKA_RESP_ERR_NO_ERROR && !error_entrega_engine) {
             pthread_mutex_lock(&mutex_outbox_engine);
-            if (quitar_evento_engine() == 0 && strncmp(payload, "FIN_RIEGO#", 9) == 0) {
+            if (quitar_evento_engine() == 0 && strncmp(payload, "FIN_RIEGO#", 9) == 0) { // solo tras confirmar el FIN_RIEGO en Kafka paso el diario a FIN_SENT (resumen entregado)
                 double volumen = 0.0;
                 int segundos = 0;
                 if (sscanf(payload, "FIN_RIEGO#%*[^#]#%lf#%d", &volumen, &segundos) == 2 &&
@@ -202,7 +199,7 @@ void *hilo_publicador_engine(void *arg) {
     return NULL;
 }
 
-// Recupera el estado guardado de un riego interrumpido.
+// recupera el estado guardado de un riego interrumpido
 int recuperar_riego_engine(void) {
     FILE *file = fopen(ruta_estado_engine, "r");
     if (file == NULL) {
@@ -239,7 +236,7 @@ int recuperar_riego_engine(void) {
         return -1;
     }
     char payload[256];
-    snprintf(payload, sizeof(payload), "FIN_RIEGO#%s#%.2f#%d#ENGINE_DESCONECTADO", id_estacion, volumen, segundos);
+    snprintf(payload, sizeof(payload), "FIN_RIEGO#%s#%.2f#%d#ENGINE_DESCONECTADO", id_estacion, volumen, segundos); // si el Engine murió regando (estado ACTIVE), al arrancar envío el resumen con lo que llevaba regado: no se pierde lo ya suministrado
     pthread_mutex_lock(&mutex_outbox_engine);
     int guardado = guardar_evento_engine(payload) == 0;
     if (guardado && guardar_estado_riego("FIN_PENDING", volumen, segundos) != 0) {
@@ -252,7 +249,7 @@ int recuperar_riego_engine(void) {
     return -1;
 }
 
-// Lee el estado y el offset guardados para el riego.
+// lee el estado y el offset guardados para el riego
 int consultar_estado_riego(char *estado, size_t tam, int *particion, long long *offset) {
     if (tam == 0) {
         return 0;
@@ -287,7 +284,7 @@ int consultar_estado_riego(char *estado, size_t tam, int *particion, long long *
     return 1;
 }
 
-// Cierra la conexión local con el Monitor al terminar el Engine.
+// cierra la conexión local con el Monitor al terminar el Engine
 void finalizar(int sig)
 {
     printf("\n[ENGINE] Apagando motor de la estación...\n");
@@ -297,10 +294,7 @@ void finalizar(int sig)
     exit(0);
 }
 
-/* =========================================================================
- * HILO CLIENTE LOCAL CON SOPORTE DNS PARA CONECTAR AL MONITOR
- * ========================================================================= */
-// Mantiene la conexión con el Monitor y recibe sus avisos.
+// mantiene la conexión con el Monitor y recibe sus avisos
 void *hilo_conexion_monitor(void *arg)
 {
     struct sockaddr_in direccion;
@@ -362,7 +356,7 @@ void *hilo_conexion_monitor(void *arg)
 
             buffer[n] = '\0';
             pthread_mutex_lock(&mutex_estado_engine);
-            if (strstr(buffer, "CENTRAL_KO") != NULL) {
+            if (strstr(buffer, "CENTRAL_KO") != NULL) { // el Monitor me dice en cada ping si Central está viva; sin Central no acepto riegos nuevos
                 central_disponible = 0;
                 central_estado_recibido = 1;
             } else if (strstr(buffer, "CENTRAL_OK") != NULL) {
@@ -383,7 +377,7 @@ void *hilo_conexion_monitor(void *arg)
                 pthread_mutex_unlock(&mutex_estado_engine);
             }
 
-            const char *latido = "OK\n";
+            const char *latido = "OK\n"; // respondo al ping del Monitor: OK si todo bien, KO si hay fuga simulada; así el Monitor avisa a Central
             int fuga_actual;
             pthread_mutex_lock(&mutex_estado_engine);
             fuga_actual = estado_fuga;
@@ -419,7 +413,7 @@ void *hilo_ciclo_riego(void *arg)
         free(arg);
     }
     int rechazo = 0;
-    pthread_mutex_lock(&mutex_estado_engine);
+    pthread_mutex_lock(&mutex_estado_engine); // comprobaciones antes de abrir la válvula: Monitor, Central, fuera de servicio, fuga o ya regando
     if (!monitor_conectado) {
         rechazo = 1;
     }
@@ -465,7 +459,7 @@ void *hilo_ciclo_riego(void *arg)
     int segundos = 0;
 
     pthread_mutex_lock(&mutex_outbox_engine);
-    int estado_guardado = guardar_estado_riego("ACTIVE", volumen_total, segundos) == 0;
+    int estado_guardado = guardar_estado_riego("ACTIVE", volumen_total, segundos) == 0;// primero dejo constancia en el diario y luego abro la válvula; si caigo, al reiniciar sé que había un riego en curso
     pthread_mutex_unlock(&mutex_outbox_engine);
     if (!estado_guardado) {
         pthread_mutex_lock(&mutex_estado_engine);
@@ -492,7 +486,7 @@ void *hilo_ciclo_riego(void *arg)
     printf("[ENGINE %s] >>> ABRIENDO ELECTROVÁLVULA - INICIANDO RIEGO <<<\n", id_estacion);
     printf("======================================================\n");
 
-    while (segundos < 10) {
+    while (segundos < 10) { // cada vuelta es 1 s: simulo caudal, sumo volumen y mando telemetría; el límite de 10 s es el tiempo máximo del riego
         int fuga_actual;
         int parada_actual;
         int monitor_actual;
@@ -501,7 +495,7 @@ void *hilo_ciclo_riego(void *arg)
         parada_actual = abortar_riego;
         monitor_actual = monitor_conectado;
         pthread_mutex_unlock(&mutex_estado_engine);
-        if (fuga_actual || parada_actual || !monitor_actual) {
+        if (fuga_actual || parada_actual || !monitor_actual) { // salgo del riego si hay fuga, orden de parada o se cae el Monitor (requisito: la fuga corta el riego al instante)
             break;
         }
 
@@ -515,7 +509,7 @@ void *hilo_ciclo_riego(void *arg)
                id_estacion, segundos, caudal_lpm, volumen_total);
 
         char payload_tel[256];
-        snprintf(payload_tel, sizeof(payload_tel), "TELEMETRIA#%s#%.2f#%.2f", id_estacion, caudal_lpm, volumen_total);
+        snprintf(payload_tel, sizeof(payload_tel), "TELEMETRIA#%s#%.2f#%.2f", id_estacion, caudal_lpm, volumen_total);// la telemetría no va directa a Kafka, pasa por la cola local y la publica el hilo publicador
         pthread_mutex_lock(&mutex_outbox_engine);
         int telemetria_guardada = guardar_evento_engine(payload_tel) == 0;
         int estado_actualizado = guardar_estado_riego("ACTIVE", volumen_total, segundos) == 0;
@@ -543,7 +537,7 @@ void *hilo_ciclo_riego(void *arg)
 
     char payload_fin[256];
     const char *causa_fin = "NORMAL";
-    if (fuga_actual) {
+    if (fuga_actual) { // la causa (NORMAL, FUGA, DETENIDO, ENGINE_DESCONECTADO) la usa Central para decidir el estado final y el aviso al FO
         causa_fin = "FUGA";
     } else if (!monitor_actual) {
         causa_fin = "ENGINE_DESCONECTADO";
@@ -573,7 +567,7 @@ void *hilo_ciclo_riego(void *arg)
     }
 
     if (fin_guardado) {
-        while (access(ruta_estado_engine, F_OK) == 0) {
+        while (access(ruta_estado_engine, F_OK) == 0) { // no libero "regando" hasta que el resumen esté entregado en Kafka, para no mezclar dos riegos
             char estado_guardado[32];
             if (!consultar_estado_riego(estado_guardado, sizeof(estado_guardado), NULL, NULL) ||
                 strcmp(estado_guardado, "FIN_PENDING") != 0) break;
@@ -587,7 +581,7 @@ void *hilo_ciclo_riego(void *arg)
     return NULL;
 }
 
-// Comprueba si se puede regar y arranca el hilo del ciclo.
+// comprueba si se puede regar y arranca el hilo del ciclo
 void lanzar_riego_async(int manual)
 {
     int riego_actual;
@@ -612,7 +606,7 @@ void lanzar_riego_async(int manual)
         return;
     }
     if (!central_activa) {
-        printf("[ENGINE] No se puede iniciar el riego: WM_Central no est\xE1 disponible.\n");
+        printf("[ENGINE] No se puede iniciar el riego: WM_Central no esta disponible.\n");
         return;
     }
     int *parametro_manual = malloc(sizeof(int));
@@ -629,7 +623,7 @@ void lanzar_riego_async(int manual)
 }
 
 
-// Recibe y ejecuta las órdenes de Central que llegan por Kafka.
+// recibe y ejecuta las órdenes de Central que llegan por Kafka
 void *hilo_consumidor_kafka(void *arg)
 {
     char errstr[512];
@@ -640,7 +634,7 @@ void *hilo_consumidor_kafka(void *arg)
     rd_kafka_conf_set(conf, "bootstrap.servers", kafka_broker, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr, sizeof(errstr));
-    rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr)); // commit manual del offset: solo confirmo la orden cuando ya está reflejada en el diario
 
     rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
     rd_kafka_poll_set_consumer(rk);
@@ -675,7 +669,7 @@ void *hilo_consumidor_kafka(void *arg)
                     char estado_guardado[32];
                     int hay_estado = consultar_estado_riego(estado_guardado, sizeof(estado_guardado),
                                                            &particion_guardada, &offset_guardado);
-                    int es_orden_repetida = hay_estado && particion_guardada == msg->partition &&
+                    int es_orden_repetida = hay_estado && particion_guardada == msg->partition && // idempotencia: guardo partición y offset de la orden; si Kafka me la reentrega tras un reinicio, no riego dos veces
                                             (long long)msg->offset <= offset_guardado;
                     if (es_orden_repetida) {
                         printf("[ENGINE] Orden Kafka ya procesada; no se inicia otro riego.\n");
@@ -718,7 +712,7 @@ void *hilo_consumidor_kafka(void *arg)
                         }
                     }
                 }
-                if (strstr(payload, "FUERA_SERVICIO") != NULL)
+                if (strstr(payload, "FUERA_SERVICIO") != NULL) // bloqueo de Central: marco fuera de servicio y aborto el riego en curso
                 {
                     pthread_mutex_lock(&mutex_estado_engine);
                     fuera_servicio = 1;
@@ -758,7 +752,7 @@ void *hilo_consumidor_kafka(void *arg)
     return NULL;
 }
 
-// Configura el Engine y pone en marcha sus hilos.
+// configura el Engine y pone en marcha sus hilos
 int main(int argc, char *argv[])
 {
     setbuf(stdout, NULL);
@@ -838,7 +832,7 @@ int main(int argc, char *argv[])
         }
 
         int op = atoi(opcion);
-        if (op == 1)
+        if (op == 1) // tecla 1: simula la fuga poniendo estado_fuga=1; el siguiente ping del Monitor recibirá KO
         {
             pthread_mutex_lock(&mutex_estado_engine);
             estado_fuga = 1;
