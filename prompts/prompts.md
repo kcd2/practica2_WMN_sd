@@ -12,12 +12,26 @@ Revisa `WM_WS_E.c` y `WM_WS_M.c`. Dime exactamente por qué no se entera el hilo
 
 Tengo varias dudas sobre cómo estructurar el código antes de ponerme a escribir:  (vamos a manejar tres topics: `wm_peticiones`, `wm_ordenes_ws` y `wm_respuestas_fo`).
 
-1. ¿Cómo se configuran el productor y el consumidor con `rd_kafka_conf_set`? ¿Qué propiedades básicas son obligatorias y cómo compruebo si los parámetros son válidos?
+1. ¿Cómo se configuran el productor y el consumidor con `rd_kafka_conf_set`?
 2. En el consumidor, ¿cómo funciona el flujo de suscribirse a un topic (`rd_kafka_subscribe`) y leer mensajes con `rd_kafka_consumer_poll` sin que se quede colgado?
-3. En el productor, veo que existe `rd_kafka_produce`, pero no entiendo bien para qué sirven `rd_kafka_flush` ni los callbacks de entrega (`dr_msg_cb`). ¿Realmente hacen falta si la función ya devuelve 0?
+3. En el productor, veo que existe `rd_kafka_produce`, pero no entiendo bien para qué sirven `rd_kafka_flush` ni los callbacks de entrega (`dr_msg_cb`).
 
 Ponme un ejemplo breve y sencillo que use alguno de los topics de la práctica para ver la sintaxis y qué errores típicos hay que capturar al llamar a estas funciones.
 
+
+## Consulta sobre Kafka en bucle en railway
+
+Asocie Kafka con /var/lib/kafka/data y el servicio queda en estado Crashed. He revisado los logs de mi proyecto en Railway: "Found directory /var/lib/kafka/data/lost+found, 'lost+found' is not in the form of topic-partition". Por que sale ese error? Explicame a que se debe y como podria solucionarlo.
+
+
+## Ayuda con respecto a la memoria
+
+Necesito explicar mi proyecto para documentarlo en una memoria, ayudame a hacer una estructura de mi trabajo para explicarlo de la mejor manera.
+
+
+## Dudas con respecto a pruebas
+
+Quiero probar lo que llevo de mi proyecto, ¿Cual es la mejor manera de implementar pruebas con los contenedores que hasta el momento tengo implementados?
 
 
 
