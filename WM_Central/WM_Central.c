@@ -521,7 +521,7 @@ void *hilo_vigilancia_monitores(void *arg) {
         sqlite3 *db = NULL;
         if (sqlite3_open("db_data/water_management.db", &db) == SQLITE_OK) {
             sqlite3_busy_timeout(db, 2000);
-            const char *sql = "UPDATE estaciones SET estado_pre_desconexion = CASE WHEN estado = 'DESCONECTADA' THEN estado_pre_desconexion ELSE estado END, estado = 'DESCONECTADA', caudal = 0.0 WHERE estado != 'DESCONECTADA' AND (ultimo_latido IS NULL OR CAST(strftime('%s','now') AS INTEGER) - ultimo_latido >= 5);"; // 5 s sin latido del Monitor => DESCONECTADA (guardo el estado anterior para restaurarlo)
+            const char *sql = "UPDATE estaciones SET estado_pre_desconexion = CASE WHEN estado = 'DESCONECTADA' THEN estado_pre_desconexion ELSE estado END, estado = 'DESCONECTADA', caudal = 0.0 WHERE estado != 'DESCONECTADA' AND (ultimo_latido IS NULL OR CAST(strftime('%s','now') AS INTEGER) - ultimo_latido >= 15);"; // 15 s sin latido del Monitor => DESCONECTADA (guardo el estado anterior para restaurarlo)
             if (sqlite3_exec(db, sql, NULL, NULL, NULL) != SQLITE_OK) {
                 fprintf(stderr, "[CENTRAL] No se pudieron actualizar los estados por vencimiento de latido.\n");
             }
@@ -980,8 +980,8 @@ void *hilo_menu_central(void *arg) {
         printf("Seleccione opción: ");
 
         if (!fgets(entrada, sizeof(entrada), stdin)) {
-            sleep(1);
-            continue;
+            printf("\n[CENTRAL] Sin entrada de teclado: menu de consola desactivado.\n");
+            return NULL;
         }
         int opcion = atoi(entrada);
 
