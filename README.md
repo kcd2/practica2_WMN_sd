@@ -21,7 +21,7 @@ Kafka se utiliza con estos tres topics:
 - `wm_ordenes_ws`: distribuye órdenes de Central a los Engine.
 - `wm_respuestas_fo`: entrega a FO las respuestas y los resultados procesados por Central.
 
-Los topics contienen mensajes de texto con campos separados por `#`. La telemetría viaja como evento dentro de `wm_peticiones`; no existe un topic independiente llamado `wm_telemetria` en esta configuración.
+Los topics contienen mensajes de texto con campos separados por `#`. La telemetría viaja como evento dentro de `wm_peticiones`.
 
 Los sockets TCP cubren la comunicación entre Monitor y Central, y el enlace local entre Monitor y Engine. En el escenario Docker, Central escucha a los Monitor en el puerto `8080`; el panel HTTP de Central se publica en el puerto `8081`.
 
