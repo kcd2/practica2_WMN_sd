@@ -211,10 +211,11 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
     printf("Esperando confirmacion de la Central para %s...\n", id_estacion_esperada);
     int riego_en_curso = 0;
     time_t inicio_espera = time(NULL);
+    int limite_espera = 15; // segundos sin noticias de Central; tras una averia se espera mas a que la estacion se recupere
 
     while (1) {
         // si en 15 s Central no contesta aviso del error y dejo la petición pendiente
-        if (time(NULL) - inicio_espera >= 15) {
+        if (time(NULL) - inicio_espera >= limite_espera) {
             fprintf(stderr, ">>> [ERROR] Imposible conectar con WM_Central o la Central está fuera de servicio.\n");
             return 0; 
         }
@@ -237,6 +238,10 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
                 char *duracion = strtok(NULL, "#");
 
                 if (id_op && id_est && resultado && strcmp(id_est, id_estacion_esperada) == 0) {
+                    inicio_espera = time(NULL);
+                    if (strcmp(resultado, "ERROR_AVERIA") == 0) {
+                        limite_espera = 120;
+                    }
                     if (strcmp(resultado, "TELEMETRIA") == 0 && strcmp(id_op, id_operador_actual) == 0) {
                         const char *caudal = detalle;
                         const char *volumen = valor;
