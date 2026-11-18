@@ -145,7 +145,8 @@ int guardar_resultado_checkpoint(const char *id_estacion, int linea, rd_kafka_me
 
 // confirma a Kafka que el mensaje ya se procesó
 int confirmar_mensaje(rd_kafka_t *rk_consumer, rd_kafka_message_t *mensaje) {
-    rd_kafka_resp_err_t error = rd_kafka_commit_message(rk_consumer, mensaje, 0);
+    // commit asíncrono: no espero la ida y vuelta al broker por cada mensaje ajeno; si se pierde, solo se relee
+    rd_kafka_resp_err_t error = rd_kafka_commit_message(rk_consumer, mensaje, 1);
     if (error != RD_KAFKA_RESP_ERR_NO_ERROR) {
         fprintf(stderr, "[FO] No se pudo confirmar el offset Kafka; el mensaje se volverá a leer.\n");
         return -1;
@@ -200,7 +201,9 @@ int completar_operacion(rd_kafka_t *rk_consumer, const char *id_estacion, rd_kaf
         fprintf(stderr, "[FO] No se pudo guardar el resultado; el offset queda pendiente.\n");
         return 0;
     }
-    if (confirmar_mensaje(rk_consumer, mensaje) != 0) {
+    // el resultado de mi operación sí lo confirmo de forma síncrona
+    if (rd_kafka_commit_message(rk_consumer, mensaje, 0) != RD_KAFKA_RESP_ERR_NO_ERROR) {
+        fprintf(stderr, "[FO] No se pudo confirmar el offset Kafka; el mensaje se volverá a leer.\n");
         return 0;
     }
     return 1;
@@ -224,6 +227,7 @@ int esperar_respuesta(rd_kafka_t *rk_consumer, const char *id_operador_actual, c
 
         if (rkmessage) {
             if (!rkmessage->err && rkmessage->payload) {
+                inicio_espera = time(NULL); // todo lo de wm_respuestas_fo lo publica Central: si llegan mensajes, Central está viva
                 char payload[512];
                 snprintf(payload, sizeof(payload), "%.*s", (int)rkmessage->len, (char *)rkmessage->payload);
                 payload[strcspn(payload, "\r\n")] = '\0';
@@ -355,6 +359,7 @@ void solicitar_estaciones_disponibles(rd_kafka_t *rk_producer, rd_kafka_topic_t 
             continue;
         }
         if (!mensaje->err && mensaje->payload) {
+            inicio = time(NULL);
             char payload[512];
             snprintf(payload, sizeof(payload), "%.*s", (int)mensaje->len, (char *)mensaje->payload);
             payload[strcspn(payload, "\r\n")] = '\0';
@@ -445,6 +450,9 @@ int main(int argc, char *argv[]) {
     rd_kafka_conf_set(conf_cons, "group.id", group_id, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_cons, "auto.offset.reset", "latest", errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_cons, "enable.auto.commit", "false", errstr, sizeof(errstr));
+    // si un FO se cierra sin avisar, Kafka libera su grupo a los 6 s en vez de 45 s y el siguiente con el mismo ID no se queda sin mensajes
+    rd_kafka_conf_set(conf_cons, "session.timeout.ms", "6000", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf_cons, "heartbeat.interval.ms", "2000", errstr, sizeof(errstr));
 
     rd_kafka_t *rk_consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf_cons, errstr, sizeof(errstr));
     if (rk_consumer == NULL) {
