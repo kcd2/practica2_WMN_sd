@@ -64,3 +64,22 @@ Los nombres `broker`, `central` y los nombres de servicio de Compose resuelven d
 
 Central mantiene en SQLite el estado de las estaciones y una cola de salida para los mensajes Kafka pendientes. Engine conserva eventos pendientes y el estado de un riego en sus datos locales; FO guarda la información necesaria para recuperar una operación pendiente. Estas persistencias permiten reintentar entregas después de reinicios. Un mensaje puede volver a publicarse si el proceso se interrumpe después de que Kafka lo acepte y antes de registrar la entrega localmente.
 
+
+## Ejecución en equipos distintos
+
+Central y Kafka se despliegan en la nube; las estaciones y los FO se lanzan en los equipos del laboratorio. Desde la raíz del repositorio se construyen las imágenes:
+
+```bash
+docker build -f Dockerfile.WS_M -t wm_ws_m .
+docker build -f Dockerfile.WS_E -t wm_ws_e .
+docker build -f Dockerfile.FO -t wm_fo .
+```
+
+Cada estación es un par Monitor/Engine en la misma red Docker; el FO conserva su operación pendiente en un volumen:
+
+```bash
+docker network create wm_red
+docker run -it --name wsm1 --network wm_red wm_ws_m ./WM_WS_M <host_central> <puerto_central> 5000 WS-01 "Parque Principal"
+docker run -it --name wse1 --network wm_red -v wse1_data:/app/engine_data wm_ws_e ./WM_WS_E <host_kafka:puerto> wsm1 5000 WS-01
+docker run -it --name fo1 -v fo1_data:/app/fo_data wm_fo ./fo_app <host_kafka:puerto> OP-01
+```
