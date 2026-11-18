@@ -486,7 +486,7 @@ void *hilo_ciclo_riego(void *arg)
     printf("[ENGINE %s] >>> ABRIENDO ELECTROVÁLVULA - INICIANDO RIEGO <<<\n", id_estacion);
     printf("======================================================\n");
 
-    while (segundos < 10) { // cada vuelta es 1 s: simulo caudal, sumo volumen y mando telemetría; el límite de 10 s es el tiempo máximo del riego
+    while (segundos < 300) { // cada vuelta es 1 s: simulo caudal, sumo volumen y mando telemetría; el límite de 10 s es el tiempo máximo del riego
         int fuga_actual;
         int parada_actual;
         int monitor_actual;

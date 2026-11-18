@@ -10,7 +10,7 @@
 #define TOPIC_PETICIONES "wm_peticiones"
 #define TOPIC_RESPUESTAS "wm_respuestas_fo"
 
-int linea_checkpoint_actual = -1;
+int linea_checkpoint_actual = -1; //modo manual por defecto
 int error_entrega_fo = 0;
 
 // guarda el punto de reanudación del operario antes de enviar o esperar una petición
