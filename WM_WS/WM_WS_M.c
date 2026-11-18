@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/time.h>
+#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -165,6 +166,7 @@ void *hilo_latido_central(void *arg)
     char mensaje[128];
     char respuesta[256];
     (void)arg;
+    time_t inicio_latidos = time(NULL);
     while (1)
     {
         int fuga_actual;
@@ -175,8 +177,9 @@ void *hilo_latido_central(void *arg)
         pthread_mutex_unlock(&mutex_estado_monitor);
 
         // si hay fuga o el Engine no está conectado, el propio latido ya avisa de FUGA a Central
+        // al arrancar dejo 10 s para que el Engine se reconecte; si no, un riego en curso daría una fuga falsa
         const char *estado = "OK";
-        if (fuga_actual || !engine_activo) {
+        if (fuga_actual || (!engine_activo && time(NULL) - inicio_latidos >= 10)) {
             estado = "FUGA";
         }
         snprintf(mensaje, sizeof(mensaje), "LATIDO#%s#%s\n", id_estacion, estado);
