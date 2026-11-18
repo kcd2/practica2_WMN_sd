@@ -486,16 +486,14 @@ void *hilo_ciclo_riego(void *arg)
     printf("[ENGINE %s] >>> ABRIENDO ELECTROVÁLVULA - INICIANDO RIEGO <<<\n", id_estacion);
     printf("======================================================\n");
 
-    while (segundos < 300) { // cada vuelta es 1 s: simulo caudal, sumo volumen y mando telemetría; el límite de 10 s es el tiempo máximo del riego
+    while (segundos < 300) { // cada vuelta es 1 s: simulo caudal, sumo volumen y mando telemetría; el límite de 300 s es el tiempo máximo del riego
         int fuga_actual;
         int parada_actual;
-        int monitor_actual;
         pthread_mutex_lock(&mutex_estado_engine);
         fuga_actual = estado_fuga;
         parada_actual = abortar_riego;
-        monitor_actual = monitor_conectado;
         pthread_mutex_unlock(&mutex_estado_engine);
-        if (fuga_actual || parada_actual || !monitor_actual) { // salgo del riego si hay fuga, orden de parada o se cae el Monitor (requisito: la fuga corta el riego al instante)
+        if (fuga_actual || parada_actual) { // salgo del riego si hay fuga u orden de parada; si cae el Monitor el riego en curso sigue hasta el final
             break;
         }
 
@@ -505,7 +503,7 @@ void *hilo_ciclo_riego(void *arg)
         double caudal_lpm = caudal_lps * 60.0;
         volumen_total += caudal_lps;
 
-        printf("[ENGINE %s] Regando... %02ds/10s | Caudal: %.2f L/min | Volumen: %.2f L\n",
+        printf("[ENGINE %s] Regando... %02ds/300s | Caudal: %.2f L/min | Volumen: %.2f L\n",
                id_estacion, segundos, caudal_lpm, volumen_total);
 
         char payload_tel[256];
@@ -525,22 +523,15 @@ void *hilo_ciclo_riego(void *arg)
 
     int fuga_actual;
     int parada_actual;
-    int monitor_actual;
     pthread_mutex_lock(&mutex_estado_engine);
-    if (!monitor_conectado) {
-        abortar_riego = 1;
-    }
     fuga_actual = estado_fuga;
     parada_actual = abortar_riego;
-    monitor_actual = monitor_conectado;
     pthread_mutex_unlock(&mutex_estado_engine);
 
     char payload_fin[256];
     const char *causa_fin = "NORMAL";
-    if (fuga_actual) { // la causa (NORMAL, FUGA, DETENIDO, ENGINE_DESCONECTADO) la usa Central para decidir el estado final y el aviso al FO
+    if (fuga_actual) { // la causa (NORMAL, FUGA, DETENIDO) la usa Central para decidir el estado final y el aviso al FO
         causa_fin = "FUGA";
-    } else if (!monitor_actual) {
-        causa_fin = "ENGINE_DESCONECTADO";
     } else if (parada_actual) {
         causa_fin = "DETENIDO";
     }
