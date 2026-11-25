@@ -477,7 +477,7 @@ void *hilo_publicador_pendientes(void *arg) {
             sqlite3_close(db);
         }
         if (!encontrado) {
-            sleep(1);
+            usleep(200000); // reviso la cola cada 0,2 s para que las respuestas salgan antes
             continue;
         }
         rd_kafka_topic_t *topic = rd_kafka_topic_new(producer, topic_nombre, NULL);
@@ -542,6 +542,9 @@ void *hilo_consumidor_kafka(void *arg) {
     rd_kafka_conf_set(conf_cons, "group.id", "grupo_central", errstr, sizeof(errstr));
     rd_kafka_conf_set(conf_cons, "enable.auto.commit", "false", errstr, sizeof(errstr)); // commit manual: confirmo el offset solo cuando ya guardé el resultado en la BD, así no pierdo eventos si Central cae
     rd_kafka_conf_set(conf_cons, "auto.offset.reset", "earliest", errstr, sizeof(errstr));
+    // igual que en el FO: si Central se reinicia, Kafka libera su grupo a los 6 s y vuelve a consumir antes
+    rd_kafka_conf_set(conf_cons, "session.timeout.ms", "6000", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf_cons, "heartbeat.interval.ms", "2000", errstr, sizeof(errstr));
 
     rd_kafka_t *rk_consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf_cons, errstr, sizeof(errstr));
     rd_kafka_poll_set_consumer(rk_consumer);
@@ -970,7 +973,7 @@ void *hilo_menu_central(void *arg) {
     char entrada[128];
     (void)ip_kafka;
 
-    sleep(3);
+    sleep(1);
 
     while (1) {
         printf("\n--- MANDO CENTRAL ---\n");
@@ -1188,7 +1191,6 @@ void *hilo_http_panel(void *arg) {
 // inicializa la base de datos, Kafka y los hilos de Central
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
-    sleep(10); // pequeña espera para que Kafka esté listo antes de conectar
 
     struct sockaddr_in dir_servidor, dir_cliente;
     unsigned int long_dir_cliente;

@@ -367,8 +367,8 @@ int main(int argc, char *argv[])
     snprintf(mensaje, sizeof(mensaje), "REGISTRO#%s#%s\n", id_estacion, ubicacion);
     printf("Intentando registrar [%s - %s] en %s:%s...\n", id_estacion, ubicacion, servidor_ip, servidor_puerto);
 
-    // Central puede tardar en arrancar, por eso reintento el registro hasta 10 veces cada 2 s
-    while (intentos < 10)
+    // Central puede tardar en arrancar, por eso reintento el registro hasta 20 veces cada 1 s
+    while (intentos < 20)
     {
         if (enviar_trama_central(mensaje, respuesta, sizeof(respuesta)) == 0)
         {
@@ -376,13 +376,13 @@ int main(int argc, char *argv[])
             break;
         }
         intentos++;
-        printf("Reintentando conexion con WM_Central en 2 segundos (%d/10)...\n", intentos);
-        sleep(2);
+        printf("Reintentando conexion con WM_Central en 1 segundo (%d/20)...\n", intentos);
+        sleep(1);
     }
 
-    if (intentos == 10)
+    if (intentos == 20)
     {
-        fprintf(stderr, "Error critico: No se pudo conectar con WM_Central tras 10 intentos.\n");
+        fprintf(stderr, "Error critico: No se pudo conectar con WM_Central tras 20 intentos.\n");
         return 1;
     }
 

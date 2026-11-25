@@ -159,6 +159,8 @@ void *hilo_publicador_engine(void *arg) {
         rd_kafka_destroy(producer);
         return NULL;
     }
+    // con Kafka recién arrancado wm_ordenes_ws aún no existe: al abrirlo con el productor Kafka lo crea y la primera orden llega antes
+    rd_kafka_topic_t *topic_ordenes = rd_kafka_topic_new(producer, "wm_ordenes_ws", NULL);
     while (1) {
         char payload[512];
         int encontrado = 0;
@@ -166,7 +168,7 @@ void *hilo_publicador_engine(void *arg) {
         encontrado = leer_evento_engine(payload, sizeof(payload));
         pthread_mutex_unlock(&mutex_outbox_engine);
         if (!encontrado) {
-            sleep(1);
+            usleep(200000); // reviso la cola cada 0,2 s para que la telemetría llegue antes
             continue;
         }
         error_entrega_engine = 0;
@@ -194,6 +196,9 @@ void *hilo_publicador_engine(void *arg) {
         }
     }
     rd_kafka_flush(producer, 5000);
+    if (topic_ordenes != NULL) {
+        rd_kafka_topic_destroy(topic_ordenes);
+    }
     rd_kafka_topic_destroy(topic);
     rd_kafka_destroy(producer);
     return NULL;
@@ -307,7 +312,7 @@ void *hilo_conexion_monitor(void *arg)
         s_monitor = socket(AF_INET, SOCK_STREAM, 0);
         if (s_monitor == -1)
         {
-            sleep(2);
+            sleep(1);
             continue;
         }
 
@@ -317,7 +322,7 @@ void *hilo_conexion_monitor(void *arg)
             fprintf(stderr, "[ENGINE] Error resolviendo host del monitor: %s\n", monitor_ip);
             close(s_monitor);
             s_monitor = -1;
-            sleep(2);
+            sleep(1);
             continue;
         }
 
@@ -329,7 +334,7 @@ void *hilo_conexion_monitor(void *arg)
         {
             close(s_monitor);
             s_monitor = -1;
-            sleep(2);
+            sleep(1);
             continue;
         }
 
@@ -626,6 +631,9 @@ void *hilo_consumidor_kafka(void *arg)
     rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
     rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr, sizeof(errstr));
     rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr)); // commit manual del offset: solo confirmo la orden cuando ya está reflejada en el diario
+    // igual que en el FO: si el Engine se reinicia, Kafka libera su grupo a los 6 s y vuelve a recibir órdenes antes
+    rd_kafka_conf_set(conf, "session.timeout.ms", "6000", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf, "heartbeat.interval.ms", "2000", errstr, sizeof(errstr));
 
     rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
     rd_kafka_poll_set_consumer(rk);

@@ -405,7 +405,6 @@ void solicitar_estaciones_disponibles(rd_kafka_t *rk_producer, rd_kafka_topic_t 
 // inicia la aplicación del operario y atiende sus solicitudes.
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
-    sleep(20); // espera a que Central (10s) y Monitor hayan registrado las estaciones
 
     if (argc < 3) {
         fprintf(stderr, "Uso: %s <IP_KAFKA:PUERTO> <ID_OPERADOR> [FICHERO_RUTINAS]\n", argv[0]);
@@ -522,12 +521,27 @@ int main(int argc, char *argv[]) {
         }
         limpiar_checkpoint();
     } else {
-        rd_kafka_message_t *mensaje_inicial = rd_kafka_consumer_poll(rk_consumer, 1000);
-        if (mensaje_inicial != NULL) {
-            if (!mensaje_inicial->err) {
-                confirmar_mensaje(rk_consumer, mensaje_inicial);
+        // con Kafka recién arrancado wm_respuestas_fo aún no existe: al abrirlo con el productor Kafka lo crea
+        rd_kafka_topic_t *topic_respuestas = rd_kafka_topic_new(rk_producer, TOPIC_RESPUESTAS, NULL);
+        // en vez de una espera fija, empiezo en cuanto Kafka me asigna la partición de respuestas (como mucho 20 s)
+        time_t inicio_conexion = time(NULL);
+        int asignado = 0;
+        while (!asignado && time(NULL) - inicio_conexion < 20) {
+            rd_kafka_message_t *mensaje_inicial = rd_kafka_consumer_poll(rk_consumer, 500);
+            if (mensaje_inicial != NULL) {
+                if (!mensaje_inicial->err) {
+                    confirmar_mensaje(rk_consumer, mensaje_inicial);
+                }
+                rd_kafka_message_destroy(mensaje_inicial);
             }
-            rd_kafka_message_destroy(mensaje_inicial);
+            rd_kafka_topic_partition_list_t *asignacion = NULL;
+            if (rd_kafka_assignment(rk_consumer, &asignacion) == RD_KAFKA_RESP_ERR_NO_ERROR && asignacion != NULL) {
+                asignado = asignacion->cnt > 0;
+                rd_kafka_topic_partition_list_destroy(asignacion);
+            }
+        }
+        if (topic_respuestas != NULL) {
+            rd_kafka_topic_destroy(topic_respuestas);
         }
     }
 
@@ -626,7 +640,6 @@ int main(int argc, char *argv[]) {
                 break;
             }
             limpiar_checkpoint();
-            sleep(4);
         }
     }
 
