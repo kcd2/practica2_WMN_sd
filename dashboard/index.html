@@ -3,130 +3,278 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f7fc">
-  <title>WM Central · Monitorización</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f1f6f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1b20" media="(prefers-color-scheme: dark)">
+  <title>Panel de WM Central</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f6e84'/%3E%3Cpath d='M16 5.5c-3.3 4.6-8 10-8 14.4a8 8 0 0 0 16 0c0-4.4-4.7-9.8-8-14.4z' fill='%23ffffff'/%3E%3Cpath d='M12.2 20.6c1.3 1.1 2.5 1.1 3.8 0s2.5-1.1 3.8 0' fill='none' stroke='%230f6e84' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
   <style>
     :root {
-      color-scheme: light;
-      --ink: #17253b;
-      --muted: #718096;
-      --line: #e3e9f1;
-      --panel: #ffffff;
-      --blue: #4778df;
-      --green: #18845d;
-      --red: #c94e4a;
-      --orange: #b97716;
-      --gray: #718096;
-      --shadow: 0 12px 35px rgba(31, 51, 83, .07);
+      --fondo: #f1f6f7;
+      --superficie: #ffffff;
+      --superficie-2: #f6fafb;
+      --tinta: #10272f;
+      --tinta-2: #34525b;
+      --suave: #587279;
+      --linea: #dbe6e9;
+      --agua: #0f6e84;
+      --agua-suave: #dcf0f4;
+      --sombra: 0 1px 2px rgba(16, 39, 47, .05), 0 8px 24px rgba(16, 39, 47, .06);
+      --ok: #17633f;
+      --ok-bg: #e3f3ea;
+      --ok-bar: #3a9a6b;
+      --riego: #1a5aa6;
+      --riego-bg: #e4eefb;
+      --riego-bar: #3b82d6;
+      --fuga: #a52a20;
+      --fuga-bg: #fbe8e6;
+      --fuga-bar: #d4574c;
+      --fuga-borde: #f1c4bf;
+      --fuera: #8a5300;
+      --fuera-bg: #fbf0dc;
+      --fuera-bar: #d99a2b;
+      --desc: #56636b;
+      --desc-bg: #eaeef0;
+      --desc-bar: #9aa8b0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fondo: #0d1b20;
+        --superficie: #132a31;
+        --superficie-2: #183239;
+        --tinta: #e4eff2;
+        --tinta-2: #c3d4d9;
+        --suave: #8fa9b1;
+        --linea: #24414a;
+        --agua: #5cc0d4;
+        --agua-suave: #1b4652;
+        --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+        --ok: #86d6aa;
+        --ok-bg: rgba(58, 154, 107, .18);
+        --ok-bar: #4fb582;
+        --riego: #93bdf3;
+        --riego-bg: rgba(59, 130, 214, .2);
+        --riego-bar: #5b9be6;
+        --fuga: #f39a90;
+        --fuga-bg: rgba(212, 87, 76, .2);
+        --fuga-bar: #e06a5f;
+        --fuga-borde: rgba(224, 106, 95, .35);
+        --fuera: #f0c378;
+        --fuera-bg: rgba(217, 154, 43, .18);
+        --fuera-bar: #e0a73f;
+        --desc: #a9b6bd;
+        --desc-bg: rgba(154, 168, 176, .16);
+        --desc-bar: #7d8d95;
+      }
     }
     * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; background: #f4f7fc; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .shell { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 42px; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 27px; }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 13px; color: #fff; background: linear-gradient(145deg, #4d80e6, #315db8); box-shadow: 0 7px 16px #4778df35; font-size: 21px; }
-    .brand-name { font-size: 11px; font-weight: 800; letter-spacing: 1.3px; color: #4a6aa6; text-transform: uppercase; }
-    .brand-caption { margin-top: 3px; color: var(--muted); font-size: 11px; }
-    .page-heading { margin: 0 0 5px; font-size: clamp(25px, 3vw, 33px); letter-spacing: -.9px; line-height: 1.15; }
-    .page-subtitle { margin: 0; color: var(--muted); font-size: 13px; }
-    .api-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #ead9b2; border-radius: 99px; color: #93630e; background: #fff9e9; font-size: 11px; font-weight: 750; white-space: nowrap; }
-    .api-pill.connected { border-color: #bce5d0; color: var(--green); background: #effaf4; }
-    .api-pill.disconnected { border-color: #f1ceca; color: var(--red); background: #fff3f2; }
+    [hidden] { display: none !important; }
+    body { min-height: 100vh; margin: 0; background: var(--fondo); color: var(--tinta); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .shell { width: min(1180px, 100% - 32px); margin: 0 auto; padding: 28px 0 40px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+    /* cabecera */
+    .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--agua); color: var(--superficie); }
+    .page-heading { margin: 0; font-size: 24px; font-weight: 650; line-height: 1.25; letter-spacing: -.01em; }
+    .page-subtitle { margin: 2px 0 0; color: var(--suave); font-size: 14px; }
+    .api-area { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .api-pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: 1px solid var(--linea); border-radius: 999px; background: var(--superficie); color: var(--suave); font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .api-pill.connected { border-color: transparent; background: var(--ok-bg); color: var(--ok); }
+    .api-pill.disconnected { border-color: transparent; background: var(--fuga-bg); color: var(--fuga); }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-    .connection-time { margin-top: 7px; color: #8a96a8; font-size: 10px; text-align: right; }
-    .summary { display: grid; grid-template-columns: minmax(205px, .7fr) minmax(0, 1.7fr); gap: 14px; margin-bottom: 19px; }
-    .summary-card { min-height: 86px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 2px 8px #172b4d05; }
-    .summary-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .65px; text-transform: uppercase; }
-    .summary-symbol { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; color: var(--blue); background: #edf3ff; font-size: 12px; }
-    .summary-value { display: block; margin-top: 8px; overflow-wrap: anywhere; font-size: 14px; font-weight: 700; }
-    .summary-value.good { color: var(--green); }
-    .summary-value.bad { color: var(--red); }
-    .summary-value.unknown { color: #7b8798; }
-    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); box-shadow: var(--shadow); }
-    .panel-head { display: flex; justify-content: space-between; align-items: end; gap: 15px; padding: 18px 20px 15px; border-bottom: 1px solid var(--line); }
-    .panel-title { margin: 0; font-size: 15px; font-weight: 760; letter-spacing: -.2px; }
-    .panel-caption { margin-top: 4px; color: var(--muted); font-size: 10px; }
-    .station-count { padding: 6px 9px; border: 1px solid #e3eaf4; border-radius: 7px; color: #5f6f85; background: #f7f9fc; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .connection-time { margin: 0; color: var(--suave); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+    /* aviso cuando Central no responde */
+    .alert { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--fuga-borde); border-radius: 12px; background: var(--fuga-bg); color: var(--fuga); }
+    .alert svg { flex: none; margin-top: 2px; }
+    .alert-title { display: block; font-weight: 650; }
+    .alert-text { margin: 2px 0 0; color: var(--tinta-2); font-size: 14px; }
+
+    /* bloques */
+    .card { border: 1px solid var(--linea); border-radius: 14px; background: var(--superficie); box-shadow: var(--sombra); }
+    .overview { margin-bottom: 16px; }
+    .overview-body { padding: 16px 20px 4px; }
+    .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .section-title { margin: 0; font-size: 16px; font-weight: 650; }
+    .section-note { color: var(--suave); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    /* resumen: barra con el reparto de estados y recuento */
+    .level { display: flex; gap: 3px; height: 8px; margin: 14px 0 6px; overflow: hidden; border-radius: 999px; background: var(--superficie-2); }
+    .level-seg { flex: 0 0 0; transition: flex-grow .5s ease; }
+    .level-seg.DISPONIBLE { background: var(--ok-bar); }
+    .level-seg.REGANDO { background: var(--riego-bar); }
+    .level-seg.FUGA { background: var(--fuga-bar); }
+    .level-seg.FUERA_SERVICIO { background: var(--fuera-bar); }
+    .level-seg.DESCONECTADA { background: var(--desc-bar); }
+    .state-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 8px 0 0; padding: 0; list-style: none; }
+    .state-item { padding: 8px 16px 14px; border-left: 1px solid var(--linea); }
+    .state-item:first-child { padding-left: 0; border-left: 0; }
+    .state-item.DISPONIBLE { --punto: var(--ok-bar); }
+    .state-item.REGANDO { --punto: var(--riego-bar); }
+    .state-item.FUGA { --punto: var(--fuga-bar); }
+    .state-item.FUERA_SERVICIO { --punto: var(--fuera-bar); }
+    .state-item.DESCONECTADA { --punto: var(--desc-bar); }
+    .state-name { display: flex; align-items: center; gap: 8px; color: var(--suave); font-size: 13px; }
+    .state-name::before { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--punto); content: ""; }
+    .state-count { display: block; margin-top: 2px; font-size: 28px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .state-item.alert-on .state-count { color: var(--fuga); }
+    .overview-foot { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); border-top: 1px solid var(--linea); }
+    .info-item { padding: 12px 20px 14px; }
+    .info-item + .info-item { border-left: 1px solid var(--linea); }
+    .info-label { display: block; color: var(--suave); font-size: 13px; }
+    .info-value { display: block; margin-top: 2px; font-weight: 600; overflow-wrap: anywhere; }
+    .info-value.good { color: var(--ok); }
+    .info-value.bad { color: var(--fuga); }
+    .info-value.unknown { color: var(--suave); }
+
+    /* tabla de estaciones */
+    .panel { overflow: hidden; }
+    .panel-head { padding: 16px 20px 12px; }
     .table-wrap { overflow-x: auto; }
-    table { width: 100%; min-width: 720px; border-collapse: collapse; }
-    th, td { padding: 13px 16px; border-bottom: 1px solid #edf0f5; text-align: left; font-size: 11px; }
-    th { color: #7a8799; background: #fbfcfe; font-size: 9px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
-    td { color: #46566d; }
+    table { width: 100%; min-width: 680px; border-collapse: collapse; }
+    th { padding: 10px 20px; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); background: var(--superficie-2); color: var(--suave); font-size: 13px; font-weight: 600; text-align: left; white-space: nowrap; }
+    td { padding: 13px 20px; border-bottom: 1px solid var(--linea); color: var(--tinta-2); font-size: 14px; }
+    th.num, td.num { text-align: right; }
+    td.num { color: var(--tinta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    tbody tr { transition: background-color .15s ease; }
+    tbody tr:hover { background: var(--superficie-2); }
     tbody tr:last-child td { border-bottom: 0; }
-    .station-id { color: var(--ink); font-size: 12px; font-weight: 760; }
-    .location { color: #53647a; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 99px; font-size: 9px; font-weight: 800; white-space: nowrap; }
-    .badge::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
-    .badge.DISPONIBLE { color: var(--green); background: #e9f7ef; }
-    .badge.REGANDO { color: #176746; background: #d9f3e1; animation: badgeBlink 1.2s ease-in-out infinite; }
-    .badge.FUGA { color: var(--red); background: #fff0ef; }
-    .badge.FUERA_SERVICIO { color: var(--orange); background: #fff4df; }
-    .badge.DESCONECTADA { color: var(--gray); background: #eef1f5; }
-    tr.row-DISPONIBLE td { background: #f6fbf8; }
-    tr.row-REGANDO td { background: #edf8f0; animation: rowBlink 1.4s ease-in-out infinite; }
-    tr.row-FUGA td { background: #fff7f6; }
-    tr.row-FUERA_SERVICIO td { background: #fffbf3; }
-    tr.row-DESCONECTADA td { background: #f7f8fa; }
-    .reading { color: #2f6fbc; font-variant-numeric: tabular-nums; font-weight: 720; white-space: nowrap; }
-    .muted-value { color: #a1aab7; }
-    .table-message { padding: 29px 16px; color: var(--muted); text-align: center; font-size: 12px; }
-    .footnote { display: flex; justify-content: space-between; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); color: #8793a3; font-size: 10px; }
-    @keyframes badgeBlink { 0%, 100% { opacity: 1; } 50% { opacity: .48; } }
-    @keyframes rowBlink { 0%, 100% { background: #f0f9f2; } 50% { background: #dff1e3; } }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; } }
-    @media (max-width: 680px) {
-      .shell { width: min(100% - 24px, 1240px); padding-top: 22px; }
-      .topbar { align-items: flex-start; flex-direction: column; gap: 16px; }
-      .api-area { align-self: stretch; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-      .connection-time { margin: 0; text-align: right; }
-      .summary { grid-template-columns: 1fr; gap: 10px; }
-      .summary-card { min-height: 74px; }
-      .panel-head { align-items: flex-start; padding: 15px; }
-      th, td { padding: 12px; }
-      .footnote { flex-direction: column; }
+    .station-id { color: var(--tinta); font-weight: 650; }
+    .unit { margin-left: 4px; color: var(--suave); font-size: 12px; }
+    .muted-value { color: var(--suave); }
+    .table-message { padding: 28px 20px; color: var(--suave); text-align: center; }
+    .footnote { margin: 0; padding: 12px 20px; border-top: 1px solid var(--linea); color: var(--suave); font-size: 13px; }
+
+    /* pastillas de estado */
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+    .badge::before { width: 7px; height: 7px; border-radius: 50%; background: currentColor; content: ""; }
+    .badge.DISPONIBLE { color: var(--ok); background: var(--ok-bg); }
+    .badge.REGANDO { color: var(--riego); background: var(--riego-bg); }
+    .badge.FUGA { color: var(--fuga); background: var(--fuga-bg); }
+    .badge.FUERA_SERVICIO { color: var(--fuera); background: var(--fuera-bg); }
+    .badge.DESCONECTADA { color: var(--desc); background: var(--desc-bg); }
+
+    /* fila que acaba de cambiar de estado */
+    tbody tr.changed { animation: filaCambio 2.6s ease-out; animation-delay: var(--desde, 0ms); }
+    tbody tr.changed td:first-child { animation: marcaCambio 2.6s ease-out; animation-delay: var(--desde, 0ms); }
+    @keyframes filaCambio { from { background-color: var(--agua-suave); } to { background-color: transparent; } }
+    @keyframes marcaCambio { from { box-shadow: inset 3px 0 0 var(--agua); } to { box-shadow: inset 3px 0 0 transparent; } }
+
+    /* datos sin actualizar mientras Central no responde */
+    .overview-body, .table-wrap, #lastRequest { transition: opacity .3s ease; }
+    .is-stale .overview-body, .is-stale .table-wrap, .is-stale #lastRequest { opacity: .55; }
+
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 24px, 1180px); padding-top: 18px; }
+      .topbar { flex-direction: column; gap: 14px; }
+      .api-area { flex-direction: row; justify-content: space-between; align-items: center; align-self: stretch; }
+      .page-heading { font-size: 21px; }
+      .state-list { grid-template-columns: 1fr 1fr; column-gap: 20px; }
+      .state-item, .state-item:first-child { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-top: 1px solid var(--linea); border-left: 0; }
+      .state-count { margin: 0; font-size: 20px; }
+      .overview-foot { grid-template-columns: 1fr; }
+      .info-item + .info-item { border-top: 1px solid var(--linea); border-left: 0; }
+
+      /* en el móvil cada estación se ve como una tarjeta */
+      table { min-width: 0; }
+      thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      table, tbody, td { display: block; }
+      tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "id id estado" "ubic ubic ubic" "caudal volumen operario"; gap: 2px 12px; padding: 14px 16px; border-bottom: 1px solid var(--linea); }
+      tbody tr:last-child { border-bottom: 0; }
+      td { padding: 0; border: 0; }
+      .cell-id { grid-area: id; align-self: center; }
+      .cell-status { grid-area: estado; justify-self: end; }
+      .cell-location { grid-area: ubic; color: var(--suave); }
+      .cell-flow { grid-area: caudal; }
+      .cell-volume { grid-area: volumen; }
+      .cell-operator { grid-area: operario; }
+      td.num { text-align: left; }
+      .cell-flow, .cell-volume, .cell-operator { margin-top: 8px; }
+      .cell-flow::before, .cell-volume::before, .cell-operator::before { display: block; color: var(--suave); font-size: 12px; content: attr(data-label); }
+      tbody tr.idle .cell-flow, tbody tr.idle .cell-volume, tbody tr.idle .cell-operator { display: none; }
+      .table-message { grid-column: 1 / -1; }
+      tbody tr.changed { animation: filaCambio 2.6s ease-out, marcaCambio 2.6s ease-out; animation-delay: var(--desde, 0ms); }
+      tbody tr.changed td:first-child { animation: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      tbody tr.changed { background: var(--agua-suave); }
     }
   </style>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <div>
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">≈</div>
-          <div><div class="brand-name">WaterManagement · Central</div><div class="brand-caption">Supervisión de la red de riego</div></div>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2.8c-2.9 4-7 8.8-7 12.6a7 7 0 0 0 14 0c0-3.8-4.1-8.6-7-12.6z" fill="currentColor"/><path d="M8.6 15.6c1.1.9 2.3.9 3.4 0s2.3-.9 3.4 0" fill="none" stroke="var(--agua)" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+          <h1 class="page-heading">Monitorización de estaciones</h1>
+          <p class="page-subtitle">Estado de la red de riego WaterManagement según WM_Central.</p>
         </div>
-        <h1 class="page-heading" style="margin-top: 21px">Monitorización de estaciones</h1>
-        <p class="page-subtitle">Estado y telemetría recibida desde la red de riego.</p>
       </div>
       <div class="api-area">
-        <div id="apiStatus" class="api-pill"><span class="status-dot"></span><span id="apiStatusText">Conectando con Central…</span></div>
-        <div class="connection-time">Actualizado <strong id="updatedAt">—</strong></div>
+        <div id="apiStatus" class="api-pill" role="status"><span class="status-dot" aria-hidden="true"></span><span id="apiStatusText">Conectando con Central…</span></div>
+        <p id="updatedAt" class="connection-time">Aún sin datos</p>
       </div>
     </header>
 
-    <section class="summary" aria-label="Estado de Central">
-      <article class="summary-card">
-        <div class="summary-label"><span class="summary-symbol" aria-hidden="true">●</span>Estado de Central</div>
-        <strong id="centralStatus" class="summary-value unknown">Esperando datos…</strong>
-      </article>
-      <article class="summary-card">
-        <div class="summary-label"><span class="summary-symbol" aria-hidden="true">↗</span>Última petición o evento</div>
-        <strong id="lastRequest" class="summary-value">Esperando datos…</strong>
-      </article>
+    <div id="apiAlert" class="alert" role="alert" hidden>
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.1" fill="currentColor"/></svg>
+      <div>
+        <strong id="alertTitle" class="alert-title">Central no responde</strong>
+        <p id="alertText" class="alert-text"></p>
+      </div>
+    </div>
+
+    <section class="card overview" aria-labelledby="overviewTitle">
+      <div class="overview-body">
+        <div class="section-head">
+          <h2 class="section-title" id="overviewTitle">Estado de la red</h2>
+          <span id="stationCount" class="section-note"></span>
+        </div>
+        <div class="level" aria-hidden="true">
+          <span id="level-DISPONIBLE" class="level-seg DISPONIBLE" hidden></span>
+          <span id="level-REGANDO" class="level-seg REGANDO" hidden></span>
+          <span id="level-FUGA" class="level-seg FUGA" hidden></span>
+          <span id="level-FUERA_SERVICIO" class="level-seg FUERA_SERVICIO" hidden></span>
+          <span id="level-DESCONECTADA" class="level-seg DESCONECTADA" hidden></span>
+        </div>
+        <ul class="state-list">
+          <li class="state-item DISPONIBLE"><span class="state-name">Disponibles</span><strong id="count-DISPONIBLE" class="state-count">—</strong></li>
+          <li class="state-item REGANDO"><span class="state-name">Regando</span><strong id="count-REGANDO" class="state-count">—</strong></li>
+          <li class="state-item FUGA"><span class="state-name">Con fuga</span><strong id="count-FUGA" class="state-count">—</strong></li>
+          <li class="state-item FUERA_SERVICIO"><span class="state-name">Fuera de servicio</span><strong id="count-FUERA_SERVICIO" class="state-count">—</strong></li>
+          <li class="state-item DESCONECTADA"><span class="state-name">Desconectadas</span><strong id="count-DESCONECTADA" class="state-count">—</strong></li>
+        </ul>
+      </div>
+      <div class="overview-foot">
+        <div class="info-item">
+          <span class="info-label">Central</span>
+          <strong id="centralStatus" class="info-value unknown">Esperando datos…</strong>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Última petición o evento</span>
+          <span id="lastRequest" class="info-value">Esperando datos…</span>
+        </div>
+      </div>
     </section>
 
-    <section class="panel" aria-labelledby="stationsTitle">
+    <section class="card panel" aria-labelledby="stationsTitle">
       <div class="panel-head">
-        <div><h2 class="panel-title" id="stationsTitle">Estaciones de riego</h2><div class="panel-caption">Los estados se actualizan automáticamente desde WM_Central.</div></div>
-        <span class="station-count"><span id="stationCount">—</span> estaciones</span>
+        <h2 class="section-title" id="stationsTitle">Estaciones de riego</h2>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID estación</th><th>Ubicación</th><th>Estado</th><th>Caudal</th><th>Volumen</th><th>Operario</th></tr></thead>
+          <caption class="sr-only">Estado, caudal, volumen y operario de cada estación de riego</caption>
+          <thead><tr><th scope="col">Estación</th><th scope="col">Ubicación</th><th scope="col">Estado</th><th scope="col" class="num">Caudal</th><th scope="col" class="num">Volumen</th><th scope="col">Operario</th></tr></thead>
           <tbody id="stationsBody"><tr><td class="table-message" colspan="6">Cargando estaciones desde WM_Central…</td></tr></tbody>
         </table>
       </div>
-      <div class="footnote"><span>Lecturas de caudal en L/min y volumen en L.</span><span>Actualización automática cada segundo</span></div>
+      <p class="footnote">Caudal en litros por minuto y volumen en litros. El panel consulta a Central cada segundo.</p>
     </section>
   </main>
 
@@ -138,6 +286,10 @@
       FUERA_SERVICIO: 'Fuera de servicio',
       DESCONECTADA: 'Desconectada'
     };
+    const HIGHLIGHT_MS = 2600; // tiempo que se resalta una fila cuando cambia de estado
+    const previousStatus = new Map(); // último estado conocido de cada estación
+    const changedAt = new Map(); // momento en el que cambió de estado cada estación
+    let lastUpdate = 0; // momento de la última respuesta correcta de Central
 
     // escapa caracteres especiales antes de mostrarlos como texto.
     function escapeHtml(value) {
@@ -157,15 +309,38 @@
       return 'DESCONECTADA';
     }
 
-    // da formato a una lectura numérica para mostrarla en pantalla.
+    // da formato a una lectura numérica para mostrarla en pantalla (330,0).
     function formatNumber(value) {
       if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
         return '—';
       }
-      return Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return Number(value).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
 
-    // Actualiza el indicador de conexión con Central.
+    // cambia el texto solo si es distinto, para no repintar ni repetir avisos de accesibilidad.
+    function setText(element, text) {
+      if (element.textContent !== text) {
+        element.textContent = text;
+      }
+    }
+
+    // pasa un tiempo en milisegundos a "hace 12 s".
+    function formatAgo(ms) {
+      const seconds = Math.floor(ms / 1000);
+      if (seconds < 2) {
+        return 'hace un momento';
+      }
+      if (seconds < 60) {
+        return `hace ${seconds} s`;
+      }
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) {
+        return `hace ${minutes} min ${seconds % 60} s`;
+      }
+      return 'hace más de una hora';
+    }
+
+    // Actualiza el indicador de conexión con Central y el aviso de caída.
     function setApiState(connected) {
       const pill = document.getElementById('apiStatus');
       pill.classList.toggle('connected', connected);
@@ -174,45 +349,111 @@
       if (connected) {
         statusText = 'Central conectada';
       }
-      document.getElementById('apiStatusText').textContent = statusText;
+      setText(document.getElementById('apiStatusText'), statusText);
+
+      document.body.classList.toggle('is-stale', !connected && lastUpdate > 0);
+      document.getElementById('apiAlert').hidden = connected;
+      if (!connected) {
+        if (lastUpdate) {
+          setText(document.getElementById('alertTitle'), 'Central no responde');
+          setText(document.getElementById('alertText'), 'Lo que ves son los últimos datos que llegaron y puede no estar al día. El panel sigue intentándolo cada segundo.');
+        } else {
+          setText(document.getElementById('alertTitle'), 'No se puede conectar con Central');
+          setText(document.getElementById('alertText'), 'Comprueba que WM_Central está en marcha. El panel lo sigue intentando cada segundo.');
+        }
+      }
+    }
+
+    // muestra cuánto hace de la última respuesta correcta de Central.
+    function updateFreshness() {
+      const label = document.getElementById('updatedAt');
+      if (!lastUpdate) {
+        setText(label, 'Aún sin datos');
+        return;
+      }
+      setText(label, `Actualizado ${formatAgo(Date.now() - lastUpdate)}`);
+      label.title = `Última respuesta a las ${new Date(lastUpdate).toLocaleTimeString('es-ES')}`;
+    }
+
+    // cuenta las estaciones de cada estado y ajusta la barra del resumen.
+    function renderSummary(stations) {
+      const counts = { DISPONIBLE: 0, REGANDO: 0, FUGA: 0, FUERA_SERVICIO: 0, DESCONECTADA: 0 };
+      stations.forEach(station => {
+        counts[normalizeStatus(station.estado ?? station.status)]++;
+      });
+      Object.entries(counts).forEach(([status, count]) => {
+        setText(document.getElementById(`count-${status}`), String(count));
+        const segment = document.getElementById(`level-${status}`);
+        segment.hidden = count === 0;
+        segment.style.flexGrow = count;
+      });
+      document.getElementById('count-FUGA').closest('.state-item').classList.toggle('alert-on', counts.FUGA > 0);
+      let total = `${stations.length} estaciones`;
+      if (stations.length === 1) {
+        total = '1 estación';
+      }
+      setText(document.getElementById('stationCount'), total);
     }
 
     // construye las filas de la tabla con las estaciones recibidas
     function renderStations(stations) {
       const body = document.getElementById('stationsBody');
-      document.getElementById('stationCount').textContent = stations.length;
       if (!stations.length) {
-        body.innerHTML = '<tr><td class="table-message" colspan="6">No hay estaciones registradas en Central.</td></tr>';
+        body.innerHTML = '<tr><td class="table-message" colspan="6">Central todavía no tiene estaciones registradas.</td></tr>';
         return;
       }
 
+      const now = Date.now();
       body.innerHTML = stations.map(station => {
         // prepara una fila con el estado y las lecturas de esta estación.
         const status = normalizeStatus(station.estado ?? station.status);
+        const id = String(station.id ?? station.id_estacion ?? '—');
+        if (previousStatus.has(id) && previousStatus.get(id) !== status) {
+          changedAt.set(id, now);
+        }
+        previousStatus.set(id, status);
+
         const watering = status === 'REGANDO';
+        const rowClasses = [];
+        let rowStyle = '';
+        if (!watering) {
+          rowClasses.push('idle'); // en el móvil no se muestran caudal, volumen ni operario
+        }
+        // si cambió de estado hace poco, la fila se resalta. El retraso negativo hace que la
+        // animación siga por donde iba aunque la tabla se vuelva a pintar cada segundo.
+        const since = now - (changedAt.get(id) ?? -Infinity);
+        if (since < HIGHLIGHT_MS) {
+          rowClasses.push('changed');
+          rowStyle = ` style="--desde: -${since}ms"`;
+        }
+        let rowAttributes = rowStyle;
+        if (rowClasses.length) {
+          rowAttributes = ` class="${rowClasses.join(' ')}"${rowStyle}`;
+        }
+
         let flow = '<span class="muted-value">—</span>';
         let volume = '<span class="muted-value">—</span>';
-        let operator = '—';
+        let operator = '<span class="muted-value">—</span>';
         if (watering) {
           let flowValue = station.caudal;
           let volumeValue = station.volumen;
-          operator = station.operario ?? station.operator ?? '—';
+          operator = escapeHtml(station.operario || station.operator || '—');
           if (flowValue === null || flowValue === undefined) {
             flowValue = station.flowRate;
           }
           if (volumeValue === null || volumeValue === undefined) {
             volumeValue = station.volume;
           }
-          flow = `${formatNumber(flowValue)} <span class="muted-value">L/min</span>`;
-          volume = `${formatNumber(volumeValue)} <span class="muted-value">L</span>`;
+          flow = `${formatNumber(flowValue)}<span class="unit">L/min</span>`;
+          volume = `${formatNumber(volumeValue)}<span class="unit">L</span>`;
         }
-        return `<tr class="row-${status}">
-          <td><strong class="station-id">${escapeHtml(station.id ?? station.id_estacion ?? '—')}</strong></td>
-          <td class="location">${escapeHtml(station.ubicacion ?? station.location ?? '—')}</td>
-          <td><span class="badge ${status}">${statusLabels[status]}</span></td>
-          <td class="reading">${flow}</td>
-          <td class="reading">${volume}</td>
-          <td>${escapeHtml(operator)}</td>
+        return `<tr${rowAttributes}>
+          <td class="cell-id" data-label="Estación"><span class="station-id">${escapeHtml(id)}</span></td>
+          <td class="cell-location" data-label="Ubicación">${escapeHtml(station.ubicacion ?? station.location ?? '—')}</td>
+          <td class="cell-status" data-label="Estado"><span class="badge ${status}">${statusLabels[status]}</span></td>
+          <td class="cell-flow num" data-label="Caudal">${flow}</td>
+          <td class="cell-volume num" data-label="Volumen">${volume}</td>
+          <td class="cell-operator" data-label="Operario">${operator}</td>
         </tr>`;
       }).join('');
     }
@@ -220,37 +461,42 @@
     // consulta la API y refresca los datos del panel.
     async function actualizarPanel() {
       try {
-        const response = await fetch('/api/status', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        // si Central tarda más de 3 s en contestar se considera que no responde
+        const response = await fetch('/api/status', { headers: { Accept: 'application/json' }, cache: 'no-store', signal: AbortSignal.timeout?.(3000) });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         if (!data || !Array.isArray(data.stations)) {
           throw new Error('Formato de respuesta no válido');
         }
 
+        lastUpdate = Date.now();
         setApiState(true);
-        const central = data.central ?? 'Sin dato';
+        const central = String(data.central ?? 'Sin dato');
         const centralEl = document.getElementById('centralStatus');
-        centralEl.textContent = central;
+        setText(centralEl, central.charAt(0).toUpperCase() + central.slice(1).toLowerCase());
         let centralClass = 'unknown';
-        if (/operativ|\bok\b|conectad/i.test(String(central))) {
+        if (/operativ|\bok\b|conectad/i.test(central)) {
           centralClass = 'good';
         }
-        centralEl.className = `summary-value ${centralClass}`;
-        document.getElementById('lastRequest').textContent = data.ultima_peticion || 'Sin peticiones recientes';
-        document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        centralEl.className = `info-value ${centralClass}`;
+        setText(document.getElementById('lastRequest'), data.ultima_peticion || 'Sin peticiones recientes');
+        renderSummary(data.stations);
         renderStations(data.stations);
       } catch (_) {
         setApiState(false);
         const centralEl = document.getElementById('centralStatus');
-        centralEl.textContent = 'Sin respuesta de la API';
-        centralEl.className = 'summary-value bad';
-        document.getElementById('stationCount').textContent = '—';
-        document.getElementById('stationsBody').innerHTML = '<tr><td class="table-message" colspan="6">No se han podido cargar los datos de WM_Central.</td></tr>';
+        setText(centralEl, 'Sin respuesta');
+        centralEl.className = 'info-value bad';
+        if (!lastUpdate) {
+          document.getElementById('stationsBody').innerHTML = '<tr><td class="table-message" colspan="6">No se han podido cargar las estaciones de WM_Central.</td></tr>';
+        }
       } finally {
+        updateFreshness();
         window.setTimeout(actualizarPanel, 1000);
       }
     }
 
+    window.setInterval(updateFreshness, 1000);
     actualizarPanel();
   </script>
 </body>
