@@ -4,3 +4,7 @@
 /db_data/ultima_peticion.txt
 /fo_data/operacion_pendiente.txt
 /engine_data/
+
+node_modules/
+db_data/*.db*
+WM_Registry/certs/*.pem
