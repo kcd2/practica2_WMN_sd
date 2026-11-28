@@ -8,3 +8,7 @@
 node_modules/
 db_data/*.db*
 WM_Registry/certs/*.pem
+
+node_modules/
+db_data/*.db*
+WM_Registry/certs/*.pem
